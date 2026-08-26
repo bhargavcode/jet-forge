@@ -351,7 +351,7 @@ export function ComposeNode({
             <SlotHint label="Top app bar" />
           </DropTarget>
         ) : null}
-        <DropTarget id={`${node.id}::content`} className="relative min-h-0 flex-1 overflow-hidden">
+        <DropTarget id={`${node.id}::content`} className="relative min-h-0 flex-1 overflow-y-auto">
           <ComposeNode
             node={content}
             scope={scope}
@@ -567,8 +567,11 @@ export function ComposeNode({
     return wrap(
       <RippleButton
         className={cn(
-          "flex min-h-10 min-w-[48px] items-center gap-2 rounded-full px-6",
+          "flex min-h-10 min-w-[48px] w-full items-center gap-2 rounded-full px-6",
           typeScaleClass(node),
+          contentJustify(node) === "center" && "justify-center",
+          contentJustify(node) === "flex-end" && "justify-end",
+          contentJustify(node) === "flex-start" && "justify-start",
           !custom && filled && "bg-[var(--md-primary)] text-[var(--md-on-primary)]",
           !custom && outlined && "border border-[var(--md-outline)] bg-transparent text-[var(--md-primary)]",
           !custom && node.type === "TextButton" && "px-3 text-[var(--md-primary)]",
@@ -1007,8 +1010,8 @@ function NodeShell({
           data-chrome="drag"
           title="Drag to move above or below another widget"
           className={cn(
-            "absolute -left-1.5 top-1 z-20 flex size-5 items-center justify-center rounded-md bg-[#6750A4] text-white shadow-md",
-            selected ? "opacity-100" : "opacity-0 group-hover/node:opacity-100",
+            "absolute left-1 top-1 z-30 flex size-5 items-center justify-center rounded-md bg-[#6750A4] text-white shadow-md",
+            selected ? "opacity-100" : "opacity-70 group-hover/node:opacity-100",
           )}
         >
           <GripVertical className="size-3.5" />

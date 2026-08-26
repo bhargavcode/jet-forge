@@ -18,7 +18,6 @@ import { currentRoot } from "@/lib/document";
 import { interactionsOf } from "@/lib/interactions";
 import { arrayPaths } from "@/lib/model";
 import { isolateDragListeners } from "@/lib/dnd-bind";
-import { isContainer } from "@/lib/tree";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -36,13 +35,13 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
   const selected = selectedId === node.id;
   const drag = useDraggable({
     id: `layer-${node.id}`,
-    data: { source: "canvas", nodeId: node.id, type: node.type },
+    data: { source: "layers", nodeId: node.id, type: node.type },
     disabled: node.type === "Scaffold",
   });
   const drop = useDroppable({
     id: `layer-drop-${node.id}`,
     data: {
-      kind: isContainer(node.type) ? "container" : "reorder",
+      kind: "reorder",
       targetId: node.id,
       nodeId: node.id,
     },

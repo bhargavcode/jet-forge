@@ -1,7 +1,19 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { MouseSensor, TouchSensor, MeasuringStrategy, closestCorners, pointerWithin, DndContext, DragOverlay, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragOverlay,
+  MeasuringStrategy,
+  PointerSensor,
+  closestCorners,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { Palette } from "./Palette";
 import { Layers } from "./Layers";
 import { Inspector } from "./Inspector";
@@ -24,14 +36,22 @@ import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
 
 const collisionDetection: CollisionDetection = (args) => {
+  const activeId = String(args.active.id);
+  const source = args.active.data.current?.source as string | undefined;
   const activeNodeId = args.active.data.current?.nodeId as string | undefined;
-  const droppableData = (collision: { id: string | number; data?: { droppableContainer?: { data?: { current?: { nodeId?: string; kind?: string } } } } }) =>
-    collision.data?.droppableContainer?.data?.current;
+  const fromLayers = source === "layers" || activeId.startsWith("layer-");
 
-  const withoutSelf = (collisions: ReturnType<typeof pointerWithin>) =>
+  const droppableData = (collision: {
+    id: string | number;
+    data?: { droppableContainer?: { data?: { current?: { nodeId?: string; kind?: string } } } };
+  }) => collision.data?.droppableContainer?.data?.current;
+
+  const scoped = (collisions: ReturnType<typeof pointerWithin>) =>
     collisions.filter((collision) => {
       const id = String(collision.id);
       if (id.startsWith("palette-") || id.startsWith("canvas-")) return false;
+      if (fromLayers && !id.startsWith("layer-drop-")) return false;
+      if (!fromLayers && id.startsWith("layer-drop-")) return false;
       const data = droppableData(collision);
       if (activeNodeId && (data?.nodeId === activeNodeId || id === `node-${activeNodeId}` || id === `layer-drop-${activeNodeId}`)) {
         return false;
@@ -44,9 +64,9 @@ const collisionDetection: CollisionDetection = (args) => {
     return reorder.length ? reorder : collisions;
   };
 
-  const pointer = preferSibling(withoutSelf(pointerWithin(args)));
+  const pointer = preferSibling(scoped(pointerWithin(args)));
   if (pointer.length) return pointer;
-  return preferSibling(withoutSelf(closestCorners(args)));
+  return preferSibling(scoped(closestCorners(args)));
 };
 
 function dropAfter(event: DragEndEvent) {
@@ -83,12 +103,8 @@ export function Designer() {
   );
 
   const sensors = useSensors(
-    useSensor(MouseSensor, {
+    useSensor(PointerSensor, {
       activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 5 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint:
-        workspaceMode === "prototype" ? { delay: 10_000, tolerance: 5 } : { delay: 120, tolerance: 8 },
     }),
   );
 
@@ -133,7 +149,7 @@ export function Designer() {
     const kind = over.data.current?.kind as string | undefined;
     const after = dropAfter(event);
 
-    if (data?.source === "canvas" && data.nodeId) {
+    if ((data?.source === "canvas" || data?.source === "layers") && data.nodeId) {
       if (isVirtualNodeId(data.nodeId)) return;
       if (data.nodeId === parentId && kind !== "reorder") return;
       if (kind === "reorder") {
@@ -148,6 +164,13 @@ export function Designer() {
       const parent = findNode(root, parentId);
       if (!parent) return;
       if (!acceptsChild(parent.type, data.type as NodeType)) {
+        const siblingParent = findParent(root, parentId);
+        if (siblingParent?.children && acceptsChild(siblingParent.type, data.type as NodeType)) {
+          const index = siblingParent.children.findIndex((child) => child.id === parentId);
+          const message = relocate(data.nodeId, siblingParent.id, Math.max(0, index + (after ? 1 : 0)));
+          if (message) toast.message(message);
+          return;
+        }
         toast.error(`${data.type} cannot be dropped on ${parent.type}`);
         return;
       }
@@ -328,7 +351,7 @@ export function Designer() {
           </aside>
         </div>
       </div>
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={null} style={{ zIndex: 2000 }}>
         {activeDrag ? (
           <div className="max-w-56 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-lg">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{catalogLabel}</div>
