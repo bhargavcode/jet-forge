@@ -2,27 +2,30 @@
 
 import type { CSSProperties } from "react";
 import { ComposeNode } from "@/components/preview/ComposePreview";
-import type { BindingScope } from "@/lib/bindings";
+import { useRuntimeScope } from "@/components/runtime/RuntimeHost";
+import { currentRoot } from "@/lib/document";
+import { useRuntime } from "@/lib/runtime-context";
 import { getScheme, schemeToCssVars } from "@/lib/theme";
 import type { ScreenDocument } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 export function PhoneFrame({
-  screen,
-  scope,
+  document,
   selectedId,
   onSelect,
   interactive,
   className,
 }: {
-  screen: ScreenDocument;
-  scope: BindingScope;
+  document: ScreenDocument;
   selectedId: string | null;
   onSelect?: (id: string) => void;
   interactive: boolean;
   className?: string;
 }) {
-  const scheme = getScheme(screen.theme.seed, screen.theme.mode);
+  const runtime = useRuntime();
+  const scope = useRuntimeScope();
+  const root = currentRoot(document, runtime?.screenId);
+  const scheme = getScheme(document.theme.seed, document.theme.mode);
   const vars = schemeToCssVars(scheme);
 
   return (
@@ -30,18 +33,18 @@ export function PhoneFrame({
       <div
         className="phone-chassis"
         style={vars as CSSProperties}
-        data-theme={screen.theme.mode}
+        data-theme={document.theme.mode}
       >
         <div className="phone-notch" />
         <div className="phone-status">
           <span>9:41</span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-4 rounded-[2px] border border-current opacity-80" />
+          <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.14em] opacity-70">
+            {runtime?.enabled ? runtime.uiState : document.screens.find((s) => s.id === runtime?.screenId)?.name}
           </span>
         </div>
         <div className="phone-screen font-[family-name:var(--font-roboto)]">
           <ComposeNode
-            node={screen.root}
+            node={root}
             scope={scope}
             selectedId={selectedId}
             onSelect={onSelect}

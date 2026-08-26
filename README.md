@@ -37,13 +37,12 @@ The important idea: **the designer does not generate Kotlin source for each scre
 
 ## What you can do in this slice
 
-- Design with Material 3 components: Scaffold, TopAppBar, NavigationBar, FAB, Card, buttons, text field, switch, checkbox, chip, list item, typography roles, LazyColumn
-- Nest layouts (Column / Row / Box / Card) by dragging onto the canvas
-- Bind properties and repeating lists to REST JSON
-- Enter animations: fade, slide up, slide left, scale, with duration / delay / list stagger
-- Theme with Material seed colors and light / dark
-- Publish a full screen; open `/device/:id` to see the device runtime
-- Copy the Kotlin runtime into an Android app and point it at this server
+- Design Material 3 screens, including **multiple routes** (Headlines → Article → Search)
+- Click **actions** on the canvas: navigate, back, submit form, retry a failed API, open URL
+- Form **validation** (required, min length, error copy) stored on the TextField
+- **Loading / error / empty / invalid** UI painted on the same canvas via `visibleWhen`
+- Bind lists and text to a live **US news** feed (`/api/news/us`)
+- Press **Play** to execute the published behavior on the phone, then **Publish** to the device runtime
 
 ## Run locally
 
@@ -54,17 +53,18 @@ npm run dev
 
 Open [http://localhost:43145](http://localhost:43145).
 
-1. Drag components from the left palette onto the phone (or click a component while a layout is selected).
-2. Select a node to edit props, API bindings, and motion.
-3. Add data sources in the right panel. Use `/api/mock/catalog` or any public JSON API. Mock JSON is the fallback when the live call fails.
-4. Press **Publish**. Open **Published** or `/device/aurora-market` after publishing the sample.
+1. The sample app is **US Briefing**. Switch screens in the left **Screens** list.
+2. Use **Canvas: error / loading / empty / invalid** to design those states without leaving the phone.
+3. Press **Play**. Search with fewer than 3 letters to see validation; tap a story to open Article; turn on **Simulate API failure** on the news source and Retry.
+4. **Publish**, then open `/device/us-briefing`.
 
-Android emulator (sample activity in `android/sample`):
+The news proxy tries a public US headlines feed, then The Guardian `api-key=test`, and returns a structured error if both fail so the canvas error state can run.
+
+Android emulator:
 
 ```kotlin
-val baseUrl = "http://10.0.2.2:43145" // host machine from the emulator
-val screen = ScreenClient.fetchScreen(baseUrl, "aurora-market")
-val data = ScreenClient.fetchBindings(screen, baseUrl)
+val baseUrl = "http://10.0.2.2:43145"
+val screen = ScreenClient.fetchScreen(baseUrl, "us-briefing")
 StudioScreen(screen, data)
 ```
 
@@ -76,30 +76,24 @@ Copy `android/composestudio-runtime` into an Android Studio project. Enable Comp
 
 ```json
 {
-  "schemaVersion": 1,
-  "id": "aurora-market",
-  "name": "Aurora Market",
-  "theme": { "mode": "light", "seed": "purple" },
-  "dataSources": [
-    { "id": "catalog", "name": "Product catalog", "url": "/api/mock/catalog", "method": "GET" }
+  "schemaVersion": 2,
+  "id": "us-briefing",
+  "startScreenId": "headlines",
+  "screens": [
+    {
+      "id": "headlines",
+      "route": "/headlines",
+      "dataSourceIds": ["news"],
+      "emptyPath": "news.articles"
+    }
   ],
-  "root": {
-    "id": "root",
-    "type": "Scaffold",
-    "children": [
-      { "type": "TopAppBar", "slot": "topBar", "bindings": { "title": "catalog.storeName" } },
-      {
-        "type": "LazyColumn",
-        "slot": "content",
-        "itemBinding": "catalog.products",
-        "children": [
-          { "type": "Text", "bindings": { "text": "item.title" } }
-        ]
-      }
-    ]
-  }
+  "dataSources": [
+    { "id": "news", "url": "/api/news/us", "method": "GET", "fallbackToMock": false }
+  ]
 }
 ```
+
+Nodes may include `onClick` (`navigate`, `back`, `submitForm`, `retry`, `openUrl`), `formField` validation, and `visibleWhen` (`ready`, `loading`, `error`, `empty`, `invalid`). List rows bind with `item.*`; the article screen reads `route.article`.
 
 Binding rules:
 
@@ -112,13 +106,12 @@ Binding rules:
 The slice is intentionally one vertical path. A production system would add:
 
 1. **Auth and environments** — draft vs published, per-app keys, staging URLs
-2. **Actions** — button → navigate, call POST, open URL, update local state
-3. **Expressions** — visibility, enablement, formatting (`formatCurrency(item.price)`)
-4. **Shared-element / navigation transitions** between published screens
-5. **Component library versioning** — designer and APK must agree on `schemaVersion`
-6. **Hot reload on device** — websocket push after publish
-7. **Design tokens** from your brand (Material dynamic color / HCT)
-8. **Offline cache** of last published document + last API payload
+2. **Expressions** — enablement, formatting (`formatCurrency(item.price)`)
+3. **Shared-element / navigation transitions** between published screens
+4. **Component library versioning** — designer and APK must agree on `schemaVersion`
+5. **Hot reload on device** — websocket push after publish
+6. **Design tokens** from your brand (Material dynamic color / HCT)
+7. **Offline cache** of last published document + last API payload
 
 Do not generate a new APK for every screen. Keep the interpreter in the app, and treat published JSON as configuration.
 

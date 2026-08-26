@@ -18,6 +18,8 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { getByPath, resolveProp, type BindingScope } from "@/lib/bindings";
+import { isNodeVisible } from "@/lib/runtime";
+import { useRuntime } from "@/lib/runtime-context";
 import type {
   ColorToken,
   EnterAnimation,
@@ -175,10 +177,21 @@ export function ComposeNode({
   itemIndex = 0,
   interactive,
 }: NodeProps) {
+  const runtime = useRuntime();
   const selected = selectedId === node.id;
+  if (runtime && !isNodeVisible(node.visibleWhen, runtime.uiState, runtime.hasFormError)) {
+    return null;
+  }
+
+  const runAction = runtime?.enabled && node.onClick && node.onClick.type !== "none";
+
   const select = (event: MouseEvent) => {
-    if (!interactive || !onSelect) return;
     event.stopPropagation();
+    if (runAction) {
+      runtime.dispatch(node.onClick!, scope);
+      return;
+    }
+    if (!interactive || !onSelect) return;
     onSelect(node.id);
   };
 
@@ -192,6 +205,7 @@ export function ComposeNode({
         animationClass(node.animation),
         clipClass(node.modifiers.clip),
         interactive && "cursor-pointer",
+        runAction && "cursor-pointer",
         selected && interactive && "m3-selected",
         extraClass,
       )}
@@ -299,9 +313,11 @@ export function ComposeNode({
       <DropTarget id={node.id} disabled={!interactive} className="h-full overflow-y-auto">
         <div style={{ display: "flex", flexDirection: "column", gap: spacedBy }}>
         {list.length === 0 ? (
+          interactive ? (
           <div className="rounded-xl border border-dashed border-[var(--md-outline-variant)] px-3 py-8 text-center text-[12px] text-[var(--md-on-surface-variant)]">
             No items from `{node.itemBinding}`
           </div>
+          ) : null
         ) : (
           list.map((item, index) => (
             <div key={index} className="flex flex-col" style={{ gap: spacedBy }}>
@@ -405,7 +421,10 @@ export function ComposeNode({
   }
 
   if (node.type === "NavigationBarItem") {
-    const selectedItem = Boolean(node.props.selected);
+    const selectedItem =
+      (runtime?.enabled && node.onClick?.screenId
+        ? runtime.screenId === node.onClick.screenId
+        : Boolean(node.props.selected));
     const label = String(node.props.label ?? "Item");
     const icon = String(node.props.icon ?? "home");
     return wrap(
@@ -472,16 +491,34 @@ export function ComposeNode({
 
   if (node.type === "TextField") {
     const label = String(resolveProp(node, "label", scope) ?? "Label");
-    const value = String(resolveProp(node, "value", scope) ?? "");
     const placeholder = String(node.props.placeholder ?? "");
+    const formId = node.formField?.formId;
+    const fieldName = node.formField?.name;
+    const formValue =
+      formId && fieldName ? runtime?.formValues[formId]?.[fieldName] : undefined;
+    const value = formValue ?? String(resolveProp(node, "value", scope) ?? "");
+    const invalid = Boolean(formId && fieldName && runtime?.formErrors[formId]?.[fieldName]);
     return wrap(
-      <label className="block">
+      <label className="block" onClick={(event) => event.stopPropagation()}>
         <span className="mb-1 block text-[12px] font-medium tracking-[0.5px] text-[var(--md-on-surface-variant)]">
           {label}
         </span>
-        <div className="flex h-14 items-center rounded-t-md border-b-2 border-[var(--md-primary)] bg-[var(--md-surface-container-high)] px-4 text-[16px] text-[var(--md-on-surface)]">
-          {value || <span className="text-[var(--md-on-surface-variant)]">{placeholder}</span>}
-        </div>
+        {runtime?.enabled && formId && fieldName ? (
+          <input
+            value={value}
+            placeholder={placeholder}
+            onChange={(event) => runtime.setFormValue(formId, fieldName, event.target.value)}
+            className="h-14 w-full rounded-t-md border-b-2 bg-[var(--md-surface-container-high)] px-4 text-[16px] text-[var(--md-on-surface)] outline-none"
+            style={{ borderColor: invalid ? "var(--md-error)" : "var(--md-primary)" }}
+          />
+        ) : (
+          <div
+            className="flex h-14 items-center rounded-t-md border-b-2 bg-[var(--md-surface-container-high)] px-4 text-[16px] text-[var(--md-on-surface)]"
+            style={{ borderColor: invalid ? "var(--md-error)" : "var(--md-primary)" }}
+          >
+            {value || <span className="text-[var(--md-on-surface-variant)]">{placeholder}</span>}
+          </div>
+        )}
       </label>,
     );
   }

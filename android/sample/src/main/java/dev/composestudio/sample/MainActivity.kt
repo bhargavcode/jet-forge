@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val baseUrl = intent.getStringExtra("BASE_URL") ?: "http://10.0.2.2:43145"
-        val screenId = intent.getStringExtra("SCREEN_ID") ?: "aurora-market"
+        val screenId = intent.getStringExtra("SCREEN_ID") ?: "us-briefing"
         setContent {
             var document by remember { mutableStateOf<ScreenDocument?>(null) }
             var scope by remember { mutableStateOf<BindingScope>(mutableMapOf()) }

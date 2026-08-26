@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { HelpCircle, Moon, RotateCcw, Sun, Upload } from "lucide-react";
+import { HelpCircle, Moon, Play, RotateCcw, Square, Sun, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { SEED_OPTIONS } from "@/lib/theme";
 import { useDesigner } from "@/lib/store";
+import type { CanvasState } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 export function Toolbar() {
@@ -27,6 +28,10 @@ export function Toolbar() {
   const setLiveData = useDesigner((s) => s.setLiveData);
   const loadPreview = useDesigner((s) => s.loadPreview);
   const reset = useDesigner((s) => s.reset);
+  const playMode = useDesigner((s) => s.playMode);
+  const setPlayMode = useDesigner((s) => s.setPlayMode);
+  const canvasState = useDesigner((s) => s.canvasState);
+  const setCanvasState = useDesigner((s) => s.setCanvasState);
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
 
@@ -102,9 +107,25 @@ export function Toolbar() {
         <Switch checked={liveData} onCheckedChange={setLiveData} />
         Live API
       </label>
+      <select
+        className="h-8 rounded-lg border bg-background px-2 text-xs"
+        value={canvasState}
+        disabled={playMode}
+        onChange={(e) => setCanvasState(e.target.value as CanvasState)}
+      >
+        <option value="auto">Canvas: ready</option>
+        <option value="loading">Canvas: loading</option>
+        <option value="error">Canvas: error</option>
+        <option value="empty">Canvas: empty</option>
+        <option value="invalid">Canvas: invalid</option>
+      </select>
+      <Button size="sm" variant={playMode ? "default" : "outline"} onClick={() => setPlayMode(!playMode)}>
+        {playMode ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
+        {playMode ? "Stop" : "Play"}
+      </Button>
       <Button size="sm" variant="ghost" onClick={reset}>
         <RotateCcw className="size-3.5" />
-        Sample
+        US sample
       </Button>
       <Link href="/screens" className="text-xs font-medium text-muted-foreground hover:text-foreground">
         Published
@@ -146,16 +167,16 @@ function HowItWorks() {
             topBar, content, bottomBar, and FAB — the same slots Compose uses.
           </li>
           <li>
-            <strong>2. Bind.</strong> Each data source is a REST call. Bind text, images, and lists
-            with dotted paths like <code>catalog.products</code> and <code>item.title</code>.
+            <strong>2. Bind and validate.</strong> REST sources, form rules, and{" "}
+            <code>visibleWhen</code> (loading / error / empty / invalid) are designed on the same canvas.
           </li>
           <li>
-            <strong>3. Animate.</strong> Enter motion (fade, slide, scale) is stored on the node and
-            replayed with Compose AnimationSpec on device.
+            <strong>3. Actions.</strong> Clicks navigate to another screen, submit a form, retry a failed
+            API, or open a URL. Press Play to run those routes on the phone.
           </li>
           <li>
-            <strong>4. Publish.</strong> The full screen document uploads to this server. The Android
-            app fetches it, calls the same APIs, and renders Material 3 composables 1:1.
+            <strong>4. Publish.</strong> Android fetches the document, calls the same US news APIs, and
+            executes the same actions.
           </li>
         </ol>
       </DialogContent>

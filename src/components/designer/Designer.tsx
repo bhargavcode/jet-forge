@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -17,20 +17,26 @@ import { Inspector } from "./Inspector";
 import { DataSourcesPanel } from "./DataSourcesPanel";
 import { Toolbar } from "./Toolbar";
 import { PhoneFrame } from "./PhoneFrame";
+import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDesigner } from "@/lib/store";
 import { CATALOG } from "@/lib/catalog";
+import { currentRoot } from "@/lib/document";
 import { acceptsChild, findNode, findParent, isContainer } from "@/lib/tree";
 import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
 
 export function Designer() {
   const screen = useDesigner((s) => s.screen);
+  const currentScreenId = useDesigner((s) => s.currentScreenId);
   const selectedId = useDesigner((s) => s.selectedId);
   const select = useDesigner((s) => s.select);
   const addNode = useDesigner((s) => s.addNode);
   const previewData = useDesigner((s) => s.previewData);
+  const previewErrors = useDesigner((s) => s.previewErrors);
   const liveData = useDesigner((s) => s.liveData);
+  const playMode = useDesigner((s) => s.playMode);
+  const canvasState = useDesigner((s) => s.canvasState);
   const [activeType, setActiveType] = useState<NodeType | null>(null);
   const [mobileTab, setMobileTab] = useState("canvas");
   const hydrated = useSyncExternalStore(
@@ -43,13 +49,7 @@ export function Designer() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const scope = useMemo(() => {
-    const mocks = Object.fromEntries(
-      screen.dataSources.map((source) => [source.id, source.mock ?? {}]),
-    );
-    if (!liveData) return mocks;
-    return { ...mocks, ...previewData };
-  }, [liveData, previewData, screen.dataSources]);
+  const root = currentRoot(screen, currentScreenId);
 
   function onDragStart(event: DragStartEvent) {
     const type = event.active.data.current?.type as NodeType | undefined;
@@ -70,7 +70,7 @@ export function Designer() {
       slot = slotName;
     }
 
-    const parent = findNode(screen.root, parentId);
+    const parent = findNode(root, parentId);
     if (!parent) return;
     if (!acceptsChild(parent.type, type)) {
       toast.error(`${type} cannot be dropped on ${parent.type}`);
@@ -80,12 +80,12 @@ export function Designer() {
   }
 
   function addToSelection(type: NodeType) {
-    const selected = selectedId ? findNode(screen.root, selectedId) : screen.root;
+    const selected = selectedId ? findNode(root, selectedId) : root;
     if (selected && isContainer(selected.type) && acceptsChild(selected.type, type)) {
       addNode(selected.id, type);
       return;
     }
-    const parent = selectedId ? findParent(screen.root, selectedId) : null;
+    const parent = selectedId ? findParent(root, selectedId) : null;
     if (parent && acceptsChild(parent.type, type)) {
       addNode(parent.id, type);
       return;
@@ -142,13 +142,23 @@ export function Designer() {
               </div>
             </div>
             <div className={mobileTab === "canvas" || mobileTab === "inspect" ? "md:block" : "hidden md:block"}>
-              <PhoneFrame
-                screen={screen}
-                scope={scope}
-                selectedId={selectedId}
-                onSelect={select}
-                interactive
-              />
+              <RuntimeHost
+                key={playMode ? `play-${screen.id}` : `edit-${screen.id}`}
+                document={screen}
+                mode={playMode ? "play" : "edit"}
+                canvasState={canvasState}
+                editScreenId={currentScreenId}
+                liveData={liveData}
+                previewData={previewData}
+                previewErrors={previewErrors}
+              >
+                <PhoneFrame
+                  document={screen}
+                  selectedId={playMode ? null : selectedId}
+                  onSelect={select}
+                  interactive={!playMode}
+                />
+              </RuntimeHost>
             </div>
           </main>
           <aside className="hidden w-[300px] shrink-0 flex-col border-l lg:flex">

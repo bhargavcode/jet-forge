@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { PublishedScreenSummary, ScreenDocument } from "@/lib/schema";
 import { createStarterScreen } from "@/lib/starter-screen";
+import { normalizeDocument } from "@/lib/document";
 
 const dataDir = path.join(process.cwd(), "data");
 const dataFile = path.join(dataDir, "screens.json");
@@ -23,7 +24,7 @@ async function writeAll(screens: Record<string, ScreenDocument>) {
 export async function saveScreen(document: ScreenDocument): Promise<ScreenDocument> {
   const screens = await readAll();
   const published: ScreenDocument = {
-    ...document,
+    ...normalizeDocument(document),
     publishedAt: new Date().toISOString(),
   };
   screens[published.id] = published;
@@ -33,8 +34,8 @@ export async function saveScreen(document: ScreenDocument): Promise<ScreenDocume
 
 export async function getScreen(id: string): Promise<ScreenDocument | null> {
   const screens = await readAll();
-  if (screens[id]) return screens[id];
-  if (id === "aurora-market") return createStarterScreen();
+  if (screens[id]) return normalizeDocument(screens[id]);
+  if (id === "us-briefing" || id === "aurora-market") return createStarterScreen();
   return null;
 }
 

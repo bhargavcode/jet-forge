@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -84,6 +85,24 @@ export function DataSourcesPanel() {
                   rows={3}
                 />
               ) : null}
+              <label className="flex items-center justify-between gap-2 text-xs">
+                Fall back to mock on error
+                <Switch
+                  checked={Boolean(source.fallbackToMock)}
+                  onCheckedChange={(checked) =>
+                    patchDataSource(source.id, { fallbackToMock: Boolean(checked) })
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs">
+                Simulate API failure
+                <Switch
+                  checked={Boolean(source.simulateFailure)}
+                  onCheckedChange={(checked) =>
+                    patchDataSource(source.id, { simulateFailure: Boolean(checked) })
+                  }
+                />
+              </label>
               <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Mock fallback (JSON)
               </Label>
@@ -101,7 +120,7 @@ export function DataSourcesPanel() {
               />
               {previewErrors[source.id] ? (
                 <p className="text-xs text-destructive">
-                  Live fetch failed ({previewErrors[source.id]}). Using mock data.
+                  Live fetch failed ({previewErrors[source.id]}). Canvas error state will show in Play unless mock fallback is on.
                 </p>
               ) : null}
             </div>

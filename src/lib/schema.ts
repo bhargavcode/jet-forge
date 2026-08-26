@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -54,12 +54,7 @@ export type ColorToken =
   | "error"
   | "tertiary";
 
-export type EnterAnimationType =
-  | "none"
-  | "fade"
-  | "slideUp"
-  | "slideLeft"
-  | "scale";
+export type EnterAnimationType = "none" | "fade" | "slideUp" | "slideLeft" | "scale";
 
 export type IconName =
   | "home"
@@ -74,6 +69,12 @@ export type IconName =
   | "menu"
   | "notifications"
   | "tune";
+
+export type VisibleWhen = "always" | "loading" | "error" | "ready" | "empty" | "invalid";
+
+export type CanvasState = "auto" | VisibleWhen;
+
+export type ActionType = "none" | "navigate" | "back" | "submitForm" | "retry" | "openUrl" | "callApi";
 
 export interface PaddingSpec {
   all?: number;
@@ -100,6 +101,29 @@ export interface EnterAnimation {
   staggerMs?: number;
 }
 
+export interface ClickAction {
+  type: ActionType;
+  screenId?: string;
+  params?: Record<string, string>;
+  url?: string;
+  formId?: string;
+  dataSourceId?: string;
+}
+
+export interface ValidationRule {
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  message: string;
+}
+
+export interface FormFieldSpec {
+  formId: string;
+  name: string;
+  validation?: ValidationRule;
+}
+
 export interface UiNode {
   id: string;
   type: NodeType;
@@ -109,8 +133,10 @@ export interface UiNode {
   bindings?: Record<string, string>;
   children?: UiNode[];
   slot?: SlotName;
-  /** JSON path to an array, e.g. `catalog.products`. Children render once per item. */
   itemBinding?: string;
+  onClick?: ClickAction;
+  formField?: FormFieldSpec;
+  visibleWhen?: VisibleWhen;
 }
 
 export interface DataSource {
@@ -121,6 +147,18 @@ export interface DataSource {
   headers?: Record<string, string>;
   body?: string;
   mock?: unknown;
+  /** When false, a failed fetch surfaces the canvas error state instead of silent mock data. */
+  fallbackToMock?: boolean;
+  simulateFailure?: boolean;
+}
+
+export interface ScreenDef {
+  id: string;
+  name: string;
+  route: string;
+  root: UiNode;
+  dataSourceIds?: string[];
+  emptyPath?: string;
 }
 
 export interface ScreenTheme {
@@ -129,11 +167,13 @@ export interface ScreenTheme {
 }
 
 export interface ScreenDocument {
-  schemaVersion: typeof SCHEMA_VERSION;
+  schemaVersion: number;
   id: string;
   name: string;
   theme: ScreenTheme;
   dataSources: DataSource[];
+  screens: ScreenDef[];
+  startScreenId: string;
   root: UiNode;
   publishedAt?: string;
 }
@@ -143,3 +183,5 @@ export interface PublishedScreenSummary {
   name: string;
   publishedAt: string;
 }
+
+export const NONE_ACTION: ClickAction = { type: "none" };

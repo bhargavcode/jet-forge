@@ -94,13 +94,20 @@ import kotlinx.serialization.json.buildJsonObject
 fun StudioScreen(document: ScreenDocument, scope: BindingScope) {
     val dark = document.theme.mode == "dark"
     val colors = seedScheme(document.theme.seed, dark)
+    val start = if (document.screens.isNotEmpty()) {
+        document.screens.find { it.id == document.startScreenId }?.root ?: document.screens.first().root
+    } else document.root
     MaterialTheme(colorScheme = colors) {
-        RenderNode(document.root, scope, 0)
+        RenderNode(start, scope, 0)
     }
 }
 
 @Composable
 private fun RenderNode(node: UiNode, scope: BindingScope, itemIndex: Int) {
+    val whenState = node.visibleWhen ?: "always"
+    if (whenState != "always" && whenState != "ready") {
+        return
+    }
     AnimatedVisibility(
         visible = true,
         enter = enterTransition(node.animation, itemIndex),

@@ -44,6 +44,12 @@ export function updateNode(root: UiNode, id: string, patch: Partial<UiNode>): Ui
         patch.bindings === undefined
           ? node.bindings
           : { ...node.bindings, ...patch.bindings },
+      onClick: patch.onClick !== undefined ? patch.onClick : node.onClick,
+      formField:
+        patch.formField === undefined
+          ? node.formField
+          : { ...node.formField, ...patch.formField },
+      visibleWhen: patch.visibleWhen !== undefined ? patch.visibleWhen : node.visibleWhen,
     };
   });
 }

@@ -3,8 +3,9 @@
 import type { ReactNode } from "react";
 import { BINDABLE_PROPS } from "@/lib/catalog";
 import { flattenSources } from "@/lib/bindings";
-import type { ColorToken, EnterAnimationType, IconName, TextStyle, UiNode } from "@/lib/schema";
+import type { ActionType, ColorToken, EnterAnimationType, IconName, TextStyle, UiNode, VisibleWhen } from "@/lib/schema";
 import { useDesigner } from "@/lib/store";
+import { currentRoot } from "@/lib/document";
 import { findNode } from "@/lib/tree";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,8 @@ const ICONS: IconName[] = [
 ];
 
 const ANIMATIONS: EnterAnimationType[] = ["none", "fade", "slideUp", "slideLeft", "scale"];
+const VISIBILITY: VisibleWhen[] = ["always", "ready", "loading", "error", "empty", "invalid"];
+const ACTIONS: ActionType[] = ["none", "navigate", "back", "submitForm", "retry", "openUrl", "callApi"];
 
 function sliderNumber(value: number | readonly number[]) {
   return Array.isArray(value) ? Number(value[0]) : Number(value);
@@ -77,16 +80,18 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export function Inspector() {
   const screen = useDesigner((s) => s.screen);
+  const currentScreenId = useDesigner((s) => s.currentScreenId);
   const selectedId = useDesigner((s) => s.selectedId);
   const patchNode = useDesigner((s) => s.patchNode);
   const previewData = useDesigner((s) => s.previewData);
-  const node = selectedId ? findNode(screen.root, selectedId) : null;
+  const root = currentRoot(screen, currentScreenId);
+  const node = selectedId ? findNode(root, selectedId) : null;
   const paths = flattenSources(previewData);
 
   if (!node) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        Select a component on the canvas or in Layers to edit Material properties, API bindings, and enter animations.
+        Select a component to edit Material props, API bindings, click routes, form validation, and enter motion.
       </div>
     );
   }
@@ -119,6 +124,9 @@ export function Inspector() {
           <TabsTrigger value="bind" className="flex-1">
             Bind
           </TabsTrigger>
+          <TabsTrigger value="action" className="flex-1">
+            Action
+          </TabsTrigger>
           <TabsTrigger value="motion" className="flex-1">
             Motion
           </TabsTrigger>
@@ -149,12 +157,221 @@ export function Inspector() {
           {node.type === "LazyColumn" || node.type === "Column" || node.type === "Row" ? (
             <Field label="Item binding (list path)">
               <Input
-                placeholder="catalog.products"
+                placeholder="news.articles"
                 value={node.itemBinding ?? ""}
                 onChange={(e) => patchNode(node.id, { itemBinding: e.target.value })}
               />
             </Field>
           ) : null}
+          <Field label="Show when">
+            <Select
+              value={node.visibleWhen ?? "always"}
+              onValueChange={(value) => value && patchNode(node.id, { visibleWhen: value as VisibleWhen })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VISIBILITY.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </TabsContent>
+        <TabsContent value="action" className="space-y-4 p-3">
+          <Field label="On click">
+            <Select
+              value={node.onClick?.type ?? "none"}
+              onValueChange={(value) => {
+                if (!value) return;
+                patchNode(node.id, {
+                  onClick: {
+                    type: value as ActionType,
+                    screenId: node.onClick?.screenId,
+                    formId: node.onClick?.formId,
+                    url: node.onClick?.url,
+                    params: node.onClick?.params,
+                    dataSourceId: node.onClick?.dataSourceId,
+                  },
+                });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIONS.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          {node.onClick?.type === "navigate" || node.onClick?.type === "submitForm" ? (
+            <Field label="Open screen">
+              <Select
+                value={node.onClick.screenId ?? ""}
+                onValueChange={(value) =>
+                  value &&
+                  patchNode(node.id, { onClick: { ...node.onClick!, screenId: value } })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a route" />
+                </SelectTrigger>
+                <SelectContent>
+                  {screen.screens.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} ({item.route})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+          {node.onClick?.type === "navigate" ? (
+            <Field label="Pass item as route.article">
+              <Input
+                placeholder="item"
+                value={node.onClick.params?.article ?? ""}
+                onChange={(e) =>
+                  patchNode(node.id, {
+                    onClick: {
+                      ...node.onClick!,
+                      params: { ...(node.onClick?.params ?? {}), article: e.target.value },
+                    },
+                  })
+                }
+              />
+            </Field>
+          ) : null}
+          {node.onClick?.type === "openUrl" ? (
+            <Field label="URL">
+              <Input
+                placeholder="{{route.article.url}}"
+                value={node.onClick.url ?? ""}
+                onChange={(e) => patchNode(node.id, { onClick: { ...node.onClick!, url: e.target.value } })}
+              />
+            </Field>
+          ) : null}
+          {node.onClick?.type === "submitForm" || node.type === "TextField" ? (
+            <Field label="Form id">
+              <Input
+                value={node.onClick?.formId ?? node.formField?.formId ?? ""}
+                onChange={(e) => {
+                  const formId = e.target.value;
+                  patchNode(node.id, {
+                    onClick: node.onClick ? { ...node.onClick, formId } : node.onClick,
+                    formField: node.formField
+                      ? { ...node.formField, formId }
+                      : node.type === "TextField"
+                        ? { formId, name: "query" }
+                        : node.formField,
+                  });
+                }}
+              />
+            </Field>
+          ) : null}
+          {node.type === "TextField" ? (
+            <>
+              <Field label="Field name">
+                <Input
+                  value={node.formField?.name ?? ""}
+                  onChange={(e) =>
+                    patchNode(node.id, {
+                      formField: {
+                        formId: node.formField?.formId || "search",
+                        name: e.target.value,
+                        validation: node.formField?.validation,
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Required">
+                <Switch
+                  checked={Boolean(node.formField?.validation?.required)}
+                  onCheckedChange={(checked) =>
+                    patchNode(node.id, {
+                      formField: {
+                        formId: node.formField?.formId || "search",
+                        name: node.formField?.name || "query",
+                        validation: {
+                          message: node.formField?.validation?.message || "This field is required.",
+                          minLength: node.formField?.validation?.minLength,
+                          required: Boolean(checked),
+                        },
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Min length">
+                <Input
+                  type="number"
+                  value={node.formField?.validation?.minLength ?? 0}
+                  onChange={(e) =>
+                    patchNode(node.id, {
+                      formField: {
+                        formId: node.formField?.formId || "search",
+                        name: node.formField?.name || "query",
+                        validation: {
+                          required: node.formField?.validation?.required,
+                          message: node.formField?.validation?.message || "Enter a longer value.",
+                          minLength: Number(e.target.value),
+                        },
+                      },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Error message">
+                <Input
+                  value={node.formField?.validation?.message ?? ""}
+                  onChange={(e) =>
+                    patchNode(node.id, {
+                      formField: {
+                        formId: node.formField?.formId || "search",
+                        name: node.formField?.name || "query",
+                        validation: {
+                          ...node.formField?.validation,
+                          message: e.target.value,
+                        },
+                      },
+                    })
+                  }
+                />
+              </Field>
+            </>
+          ) : null}
+          {node.onClick?.type === "retry" || node.onClick?.type === "callApi" ? (
+            <Field label="Data source id">
+              <Select
+                value={node.onClick.dataSourceId ?? ""}
+                onValueChange={(value) =>
+                  value && patchNode(node.id, { onClick: { ...node.onClick!, dataSourceId: value } })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {screen.dataSources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {source.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
+          <p className="text-xs leading-5 text-muted-foreground">
+            Routes, validation, and error UI are part of the published document. Play the canvas to click through screens the same way the Android runtime will.
+          </p>
         </TabsContent>
         <TabsContent value="bind" className="space-y-4 p-3">
           {bindable.length === 0 ? (

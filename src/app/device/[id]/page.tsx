@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ComposeNode } from "@/components/preview/ComposePreview";
-import { fetchSources, type BindingScope } from "@/lib/bindings";
+import { RuntimeHost, useRuntimeScope } from "@/components/runtime/RuntimeHost";
+import { currentRoot, normalizeDocument } from "@/lib/document";
+import { useRuntime } from "@/lib/runtime-context";
 import type { ScreenDocument } from "@/lib/schema";
 import { getScheme, schemeToCssVars } from "@/lib/theme";
 
 export default function DevicePage() {
   const params = useParams<{ id: string }>();
-  const [screen, setScreen] = useState<ScreenDocument | null>(null);
-  const [data, setData] = useState<BindingScope>({});
+  const [document, setDocument] = useState<ScreenDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,11 +24,8 @@ export default function DevicePage() {
       try {
         const res = await fetch(`/api/screens/${params.id}`);
         if (!res.ok) throw new Error(res.status === 404 ? "This screen was not published." : "Could not load screen.");
-        const document = (await res.json()) as ScreenDocument;
-        if (cancelled) return;
-        setScreen(document);
-        const { data: bound } = await fetchSources(document.dataSources);
-        if (!cancelled) setData(bound);
+        const payload = normalizeDocument((await res.json()) as ScreenDocument);
+        if (!cancelled) setDocument(payload);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load screen.");
       } finally {
@@ -41,9 +39,9 @@ export default function DevicePage() {
   }, [params.id]);
 
   const vars = useMemo(() => {
-    if (!screen) return {};
-    return schemeToCssVars(getScheme(screen.theme.seed, screen.theme.mode));
-  }, [screen]);
+    if (!document) return {};
+    return schemeToCssVars(getScheme(document.theme.seed, document.theme.mode));
+  }, [document]);
 
   if (loading) {
     return (
@@ -53,7 +51,7 @@ export default function DevicePage() {
     );
   }
 
-  if (error || !screen) {
+  if (error || !document) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-[#141218] px-6 text-center">
         <div className="text-lg text-[#E6E0E9]">Screen unavailable</div>
@@ -65,7 +63,7 @@ export default function DevicePage() {
     );
   }
 
-  const scheme = getScheme(screen.theme.seed, screen.theme.mode);
+  const scheme = getScheme(document.theme.seed, document.theme.mode);
 
   return (
     <div className="flex h-dvh flex-col" style={{ background: scheme.surface }}>
@@ -81,9 +79,22 @@ export default function DevicePage() {
           <span className="text-[10px] uppercase tracking-[0.2em] opacity-70">Compose runtime</span>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <ComposeNode node={screen.root} scope={data} selectedId={null} interactive={false} />
+          <RuntimeHost key={document.id} document={document} mode="device">
+            <DeviceCanvas document={document} />
+          </RuntimeHost>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeviceCanvas({ document }: { document: ScreenDocument }) {
+  const runtime = useRuntime();
+  const scope = useRuntimeScope();
+  const root = currentRoot(document, runtime?.screenId);
+  return (
+    <div className="h-full min-h-0">
+      <ComposeNode node={root} scope={scope} selectedId={null} interactive={false} />
     </div>
   );
 }

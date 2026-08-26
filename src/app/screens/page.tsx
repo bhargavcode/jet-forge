@@ -14,8 +14,7 @@ export default async function ScreensPage() {
         </Link>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Published screens</h1>
         <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-          Each publish uploads a Compose Studio document. Android fetches the same JSON from{" "}
-          <code>/api/screens/:id</code> and renders Material 3 composables with live API bindings.
+          Each publish uploads a Compose Studio document — routes, click actions, form rules, and API error UI included. Android fetches the same JSON from <code>/api/screens/:id</code>.
         </p>
       </div>
       {screens.length === 0 ? (
