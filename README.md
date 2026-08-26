@@ -58,7 +58,7 @@ Open [http://localhost:43145](http://localhost:43145).
 3. Press **Play**. Search with fewer than 3 letters to see validation; tap a story to open Article; turn on **Simulate API failure** on the news source and Retry.
 4. **Publish**, then open `/device/us-briefing`.
 
-The news proxy tries a public US headlines feed, then The Guardian `api-key=test`, and returns a structured error if both fail so the canvas error state can run.
+The news proxy tries a public US headlines feed, then The Guardian `api-key=test`. If both remotes fail it still returns bundled US sample stories so the list stays usable. Turn on **Simulate API failure** on a data source to design the error / Retry UI.
 
 Android emulator:
 

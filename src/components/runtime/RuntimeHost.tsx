@@ -8,9 +8,11 @@ import {
   buildFormScope,
   computeUiState,
   interpolateSource,
+  mergeBindingData,
   resolveActionParams,
+  screenErrors,
+  sourcesForScreen,
   validateForm,
-  type UiRuntimeState,
 } from "@/lib/runtime";
 import { RuntimeContext, type RuntimeApi } from "@/lib/runtime-context";
 import type { CanvasState, ClickAction, ScreenDocument, VisibleWhen } from "@/lib/schema";
@@ -67,11 +69,11 @@ export function RuntimeHost({
     async (id: string, nextRoute: BindingScope, nextForms: Record<string, Record<string, string>>) => {
       const current = documentRef.current;
       const target = currentScreen(current, id);
-      const ids = target.dataSourceIds ?? [];
+      const ids = sourcesForScreen(current.dataSources, target);
       const sources = current.dataSources.filter((source) => ids.includes(source.id));
       const mockMap = Object.fromEntries(current.dataSources.map((source) => [source.id, source.mock ?? {}]));
       if (sources.length === 0) {
-        setData({});
+        setData(mockMap);
         setErrors({});
         setLoading(false);
         return;
@@ -92,10 +94,10 @@ export function RuntimeHost({
           }),
         });
         const payload = (await res.json()) as { data: BindingScope; errors: Record<string, string> };
-        setData(payload.data ?? {});
+        setData(mergeBindingData(mockMap, payload.data ?? {}));
         setErrors(payload.errors ?? {});
       } catch (error) {
-        setData({});
+        setData(mockMap);
         setErrors({
           [ids[0] ?? "app"]: error instanceof Error ? error.message : "Request failed",
         });
@@ -111,15 +113,16 @@ export function RuntimeHost({
     void fetchScreen(document.startScreenId, {}, {});
   }, [enabled, document.id, document.startScreenId, fetchScreen]);
 
-  const editData = useMemo(() => {
-    if (liveData) return { ...mocks, ...previewData };
-    return mocks;
-  }, [liveData, mocks, previewData]);
+  const editData = useMemo(
+    () => mergeBindingData(mocks, liveData ? (previewData ?? {}) : {}),
+    [liveData, mocks, previewData],
+  );
 
-  const runtimeData = enabled ? data : editData;
-  const runtimeErrors = enabled ? errors : (previewErrors ?? {});
+  const runtimeData = enabled ? mergeBindingData(mocks, data) : editData;
+  const sourceIds = sourcesForScreen(document.dataSources, activeScreen);
+  const runtimeErrors = screenErrors(enabled ? errors : (previewErrors ?? {}), sourceIds);
 
-  const computed: UiRuntimeState = computeUiState({
+  const computed = computeUiState({
     loading: enabled ? loading : false,
     errors: runtimeErrors,
     data: runtimeData,
@@ -127,9 +130,11 @@ export function RuntimeHost({
   });
 
   const uiState: VisibleWhen = !enabled
-    ? canvasState === "auto" || canvasState === "invalid"
-      ? "ready"
-      : canvasState
+    ? canvasState === "auto"
+      ? computed
+      : canvasState === "invalid"
+        ? "ready"
+        : canvasState
     : computed;
 
   const hasFormError = enabled

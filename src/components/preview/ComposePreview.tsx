@@ -17,8 +17,8 @@ import {
   User,
   ArrowLeft,
 } from "lucide-react";
-import { getByPath, resolveProp, type BindingScope } from "@/lib/bindings";
-import { isNodeVisible } from "@/lib/runtime";
+import { resolveProp, type BindingScope } from "@/lib/bindings";
+import { isNodeVisible, resolveList } from "@/lib/runtime";
 import { useRuntime } from "@/lib/runtime-context";
 import type {
   ColorToken,
@@ -186,20 +186,23 @@ export function ComposeNode({
   const runAction = runtime?.enabled && node.onClick && node.onClick.type !== "none";
 
   const select = (event: MouseEvent) => {
-    event.stopPropagation();
     if (runAction) {
+      event.stopPropagation();
       runtime.dispatch(node.onClick!, scope);
       return;
     }
     if (!interactive || !onSelect) return;
+    event.stopPropagation();
     onSelect(node.id);
   };
+
+  const handlesClick = Boolean(runAction || (interactive && onSelect));
 
   const wrap = (content: ReactNode, extraClass = "", extraStyle?: CSSProperties) => (
     <div
       data-node-id={node.id}
       data-node-type={node.type}
-      onClick={select}
+      onClick={handlesClick ? select : undefined}
       className={cn(
         "relative min-w-0",
         animationClass(node.animation),
@@ -306,8 +309,7 @@ export function ComposeNode({
   }
 
   if (node.type === "LazyColumn" && node.itemBinding) {
-    const items = getByPath(scope, node.itemBinding);
-    const list = Array.isArray(items) ? items : [];
+    const list = resolveList(scope, node.itemBinding);
     const spacedBy = Number(node.props.spacedBy ?? 12);
     return wrap(
       <DropTarget id={node.id} disabled={!interactive} className="h-full overflow-y-auto">
@@ -346,7 +348,10 @@ export function ComposeNode({
       <DropTarget
         id={node.id}
         disabled={!interactive}
-        className={cn(node.type === "LazyColumn" && "h-full overflow-y-auto")}
+        className={cn(
+          node.modifiers.fillMaxHeight && "h-full min-h-0",
+          node.type === "LazyColumn" && "h-full overflow-y-auto",
+        )}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: spacedBy }}>
           {children.length ? renderChildren(scope) : interactive ? <EmptyHint label="Column" /> : null}
@@ -382,6 +387,7 @@ export function ComposeNode({
           "bg-[var(--md-surface-container-lowest)]",
           variant === "outlined" && "border border-[var(--md-outline-variant)]",
           variant !== "outlined" && "m3-elev-1",
+          runAction && "cursor-pointer",
         )}
         style={paddingStyle(node.modifiers)}
       >

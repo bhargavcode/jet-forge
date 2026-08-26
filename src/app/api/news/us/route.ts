@@ -162,13 +162,16 @@ export async function GET(request: Request) {
       { country: "US", status: "ok", query, articles: articles.length ? articles : filterQuery(fallback, query) },
       { headers },
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
-        status: "error",
-        message: error instanceof Error ? error.message : "US news feed unavailable",
+        country: "US",
+        status: "ok",
+        query,
+        articles: filterQuery(fallback, query),
+        degraded: true,
       },
-      { status: 502, headers },
+      { headers },
     );
   }
 }

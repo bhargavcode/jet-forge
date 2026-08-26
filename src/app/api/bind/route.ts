@@ -34,9 +34,10 @@ export async function POST(request: Request) {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         data[source.id] = await res.json();
       } catch (error) {
-        errors[source.id] = error instanceof Error ? error.message : "Request failed";
         if (source.fallbackToMock && source.mock !== undefined) {
           data[source.id] = source.mock;
+        } else {
+          errors[source.id] = error instanceof Error ? error.message : "Request failed";
         }
       }
     }),

@@ -25,7 +25,16 @@ export function patchScreen(doc: ScreenDocument, screenId: string, patch: Partia
 export function normalizeDocument(doc: ScreenDocument): ScreenDocument {
   if (doc.screens?.length) {
     const start = doc.screens.find((screen) => screen.id === doc.startScreenId) ?? doc.screens[0];
-    return { ...doc, schemaVersion: 2, root: start.root, startScreenId: start.id };
+    const screens = doc.screens.map((screen) => {
+      if (screen.dataSourceIds && screen.dataSourceIds.length > 0) return screen;
+      if (screen.emptyPath) {
+        const id = screen.emptyPath.split(".")[0];
+        if (id) return { ...screen, dataSourceIds: [id] };
+      }
+      return screen;
+    });
+    const nextStart = screens.find((screen) => screen.id === start.id) ?? screens[0];
+    return { ...doc, schemaVersion: 2, screens, root: nextStart.root, startScreenId: nextStart.id };
   }
   const legacyRoot = doc.root;
   const screen: ScreenDef = {

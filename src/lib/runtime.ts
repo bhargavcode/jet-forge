@@ -61,12 +61,80 @@ export function resolveActionParams(action: ClickAction, scope: BindingScope): R
   return params;
 }
 
+export function sourcesForScreen(
+  dataSources: { id: string }[],
+  screen: { dataSourceIds?: string[]; emptyPath?: string },
+): string[] {
+  if (screen.dataSourceIds && screen.dataSourceIds.length > 0) {
+    return screen.dataSourceIds;
+  }
+  if (screen.emptyPath) {
+    const id = screen.emptyPath.split(".")[0];
+    if (id && dataSources.some((source) => source.id === id)) return [id];
+  }
+  return [];
+}
+
+export function screenErrors(
+  errors: Record<string, string>,
+  sourceIds: string[],
+): Record<string, string> {
+  if (sourceIds.length === 0) return {};
+  const next: Record<string, string> = {};
+  for (const id of sourceIds) {
+    if (errors[id]) next[id] = errors[id];
+  }
+  return next;
+}
+
 export function interpolateSource(source: DataSource, scope: BindingScope): DataSource {
   return {
     ...source,
     url: interpolate(source.url, scope),
     body: source.body ? interpolate(source.body, scope) : source.body,
   };
+}
+
+export function mergeBindingData(base: BindingScope, overlay: BindingScope): BindingScope {
+  const next: BindingScope = { ...base, ...overlay };
+  for (const [key, mock] of Object.entries(base)) {
+    const live = overlay[key];
+    if (live == null) {
+      next[key] = mock;
+      continue;
+    }
+    if (
+      mock &&
+      live &&
+      typeof mock === "object" &&
+      typeof live === "object" &&
+      !Array.isArray(mock) &&
+      !Array.isArray(live)
+    ) {
+      const merged = { ...(mock as BindingScope), ...(live as BindingScope) };
+      const mockArticles = (mock as BindingScope).articles;
+      const liveArticles = (live as BindingScope).articles;
+      if (Array.isArray(mockArticles) && !Array.isArray(liveArticles)) {
+        merged.articles = mockArticles;
+      }
+      next[key] = merged;
+    }
+  }
+  return next;
+}
+
+export function resolveList(scope: BindingScope, path: string): unknown[] {
+  const direct = getByPath(scope, path);
+  if (Array.isArray(direct)) return direct;
+  const sourceId = path.split(".")[0];
+  const source = scope[sourceId];
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    const record = source as BindingScope;
+    for (const key of ["articles", "items", "results"]) {
+      if (Array.isArray(record[key])) return record[key] as unknown[];
+    }
+  }
+  return [];
 }
 
 export function computeUiState(args: {
@@ -78,8 +146,8 @@ export function computeUiState(args: {
   if (args.loading) return "loading";
   if (Object.keys(args.errors).length > 0) return "error";
   if (args.emptyPath) {
-    const value = getByPath(args.data, args.emptyPath);
-    if (Array.isArray(value) && value.length === 0) return "empty";
+    const list = resolveList(args.data, args.emptyPath);
+    if (list.length === 0) return "empty";
   }
   return "ready";
 }
