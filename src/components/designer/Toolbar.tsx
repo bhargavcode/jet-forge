@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { HelpCircle, Moon, Play, RotateCcw, Square, Sun, Upload } from "lucide-react";
+import { HelpCircle, Moon, Play, Redo2, RotateCcw, Square, Sun, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -34,6 +34,10 @@ export function Toolbar() {
   const setCanvasState = useDesigner((s) => s.setCanvasState);
   const workspaceMode = useDesigner((s) => s.workspaceMode);
   const setWorkspaceMode = useDesigner((s) => s.setWorkspaceMode);
+  const undo = useDesigner((s) => s.undo);
+  const redo = useDesigner((s) => s.redo);
+  const canUndo = useDesigner((s) => s.past.length > 0);
+  const canRedo = useDesigner((s) => s.future.length > 0);
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
 
@@ -105,6 +109,14 @@ export function Toolbar() {
         {screen.theme.mode === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
         {screen.theme.mode}
       </Button>
+      <div className="flex rounded-lg border p-0.5">
+        <Button size="icon-sm" variant="ghost" disabled={!canUndo} title="Undo (Ctrl+Z)" onClick={undo}>
+          <Undo2 className="size-3.5" />
+        </Button>
+        <Button size="icon-sm" variant="ghost" disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" onClick={redo}>
+          <Redo2 className="size-3.5" />
+        </Button>
+      </div>
       <div className="ml-auto flex rounded-lg border p-0.5">
         {(["design", "prototype"] as WorkspaceMode[]).map((mode) => (
           <button

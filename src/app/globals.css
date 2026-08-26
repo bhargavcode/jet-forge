@@ -229,7 +229,7 @@
 }
 
 .m3-enter {
-  animation-fill-mode: both;
+  animation-fill-mode: backwards;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -247,6 +247,173 @@
 
 .m3-enter-scale {
   animation-name: m3-scale;
+}
+
+.m3-enter-slideDown {
+  animation-name: m3-slide-down;
+}
+
+.m3-enter-slideRight {
+  animation-name: m3-slide-right;
+}
+
+.m3-enter-slideOutUp {
+  animation-name: m3-slide-out-up;
+}
+
+.m3-enter-slideOutLeft {
+  animation-name: m3-slide-out-left;
+}
+
+.m3-enter-bounce {
+  animation-name: m3-bounce;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.m3-enter-bounceIn {
+  animation-name: m3-bounce-in;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.m3-enter-colorPulse {
+  animation-name: m3-color-pulse;
+}
+
+.m3-enter-elevationPulse {
+  animation-name: m3-elevation-pulse;
+}
+
+.m3-enter-cardSlide {
+  animation-name: m3-card-slide;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.m3-ease-emphasized {
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.m3-ease-bounce {
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.m3-ease-linear {
+  animation-timing-function: linear;
+}
+
+.m3-repeat-infinite {
+  animation-iteration-count: infinite;
+}
+
+@keyframes m3-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes m3-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes m3-slide-out-up {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-28px);
+  }
+}
+
+@keyframes m3-slide-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+@keyframes m3-bounce {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes m3-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes m3-color-pulse {
+  0%,
+  100% {
+    filter: saturate(1);
+    background-color: var(--m3-pulse-from, var(--md-surface));
+  }
+  50% {
+    filter: saturate(1.25);
+    background-color: var(--m3-pulse-to, var(--md-primary-container));
+  }
+}
+
+@keyframes m3-elevation-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 16%),
+      0 1px 3px 1px rgb(0 0 0 / 10%);
+  }
+  50% {
+    box-shadow:
+      0 8px 16px rgb(0 0 0 / 18%),
+      0 4px 8px rgb(0 0 0 / 12%);
+  }
+}
+
+@keyframes m3-card-slide {
+  0% {
+    opacity: 0;
+    transform: translateX(var(--m3-move-x, 36px)) translateY(var(--m3-move-y, 12px));
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-6px) translateY(0);
+  }
+  100% {
+    transform: translateX(0) translateY(0);
+  }
 }
 
 @keyframes m3-fade {

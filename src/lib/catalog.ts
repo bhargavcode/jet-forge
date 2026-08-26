@@ -180,12 +180,20 @@ export function createNode(type: NodeType): UiNode {
 }
 
 export const BINDABLE_PROPS: Partial<Record<NodeType, { key: string; label: string }[]>> = {
-  Text: [{ key: "text", label: "Text" }],
+  Text: [
+    { key: "text", label: "Text" },
+    { key: "color", label: "Color token" },
+  ],
   Image: [
     { key: "url", label: "Image URL (API)" },
     { key: "accent", label: "Placeholder color" },
+    { key: "alt", label: "contentDescription" },
   ],
-  Icon: [{ key: "url", label: "Custom icon URL" }],
+  Icon: [
+    { key: "url", label: "Custom icon URL" },
+    { key: "name", label: "Icon name" },
+    { key: "color", label: "Tint" },
+  ],
   FilledButton: [{ key: "label", label: "Label" }],
   OutlinedButton: [{ key: "label", label: "Label" }],
   TextButton: [{ key: "label", label: "Label" }],
@@ -199,6 +207,10 @@ export const BINDABLE_PROPS: Partial<Record<NodeType, { key: string; label: stri
     { key: "headline", label: "Headline" },
     { key: "supporting", label: "Supporting" },
   ],
+  LazyColumn: [{ key: "itemBinding", label: "List items" }],
+  Column: [{ key: "itemBinding", label: "List items" }],
+  Row: [{ key: "itemBinding", label: "List items" }],
+  Card: [{ key: "variant", label: "Variant" }],
   Switch: [{ key: "label", label: "Label" }],
   Checkbox: [{ key: "label", label: "Label" }],
 };

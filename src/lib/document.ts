@@ -16,6 +16,12 @@ export function replaceScreenRoot(doc: ScreenDocument, screenId: string, root: U
   return { ...doc, screens, root: start?.root ?? root };
 }
 
+export function mapAllRoots(doc: ScreenDocument, mapper: (root: UiNode, screen: ScreenDef) => UiNode): ScreenDocument {
+  const screens = doc.screens.map((screen) => ({ ...screen, root: mapper(screen.root, screen) }));
+  const start = screens.find((screen) => screen.id === doc.startScreenId) ?? screens[0];
+  return { ...doc, screens, root: start?.root ?? doc.root };
+}
+
 export function patchScreen(doc: ScreenDocument, screenId: string, patch: Partial<ScreenDef>): ScreenDocument {
   return {
     ...doc,

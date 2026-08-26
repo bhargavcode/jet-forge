@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3 as const;
+export const SCHEMA_VERSION = 4 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -54,7 +54,25 @@ export type ColorToken =
   | "error"
   | "tertiary";
 
-export type EnterAnimationType = "none" | "fade" | "slideUp" | "slideLeft" | "scale";
+export type EnterAnimationType =
+  | "none"
+  | "fade"
+  | "slideUp"
+  | "slideDown"
+  | "slideLeft"
+  | "slideRight"
+  | "slideOutUp"
+  | "slideOutLeft"
+  | "scale"
+  | "bounce"
+  | "bounceIn"
+  | "colorPulse"
+  | "elevationPulse"
+  | "cardSlide";
+
+export type AnimationEasing = "standard" | "emphasized" | "bounce" | "linear";
+
+export type AnimationRepeat = "none" | "infinite";
 
 export type IconName =
   | "home"
@@ -107,6 +125,28 @@ export interface ModifierSpec {
   weight?: number;
   padding?: PaddingSpec;
   clip?: "none" | "extraSmall" | "small" | "medium" | "large" | "full";
+  alpha?: number;
+  rotationDeg?: number;
+  offsetXDp?: number;
+  offsetYDp?: number;
+  elevationDp?: number;
+  backgroundToken?: ColorToken;
+  backgroundHex?: string;
+  borderWidthDp?: number;
+  borderToken?: ColorToken;
+}
+
+export type DrawableType = "none" | "color" | "gradient" | "image";
+
+export interface DrawableSpec {
+  type: DrawableType;
+  colorToken?: ColorToken;
+  colorHex?: string;
+  startHex?: string;
+  endHex?: string;
+  angle?: number;
+  url?: string;
+  tintToken?: ColorToken;
 }
 
 export interface EnterAnimation {
@@ -114,6 +154,12 @@ export interface EnterAnimation {
   durationMs: number;
   delayMs: number;
   staggerMs?: number;
+  easing?: AnimationEasing;
+  repeat?: AnimationRepeat;
+  colorFrom?: string;
+  colorTo?: string;
+  moveXDp?: number;
+  moveYDp?: number;
 }
 
 export interface ClickAction {
@@ -155,6 +201,7 @@ export interface UiNode {
   props: Record<string, string | number | boolean | null>;
   modifiers: ModifierSpec;
   animation?: EnterAnimation;
+  drawable?: DrawableSpec;
   bindings?: Record<string, string>;
   children?: UiNode[];
   slot?: SlotName;

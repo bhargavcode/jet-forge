@@ -9,6 +9,7 @@ import { currentRoot } from "@/lib/document";
 import { interactionsOf } from "@/lib/interactions";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 function layerBadge(node: UiNode) {
   if (node.visibleWhen && node.visibleWhen !== "always") return node.visibleWhen;
@@ -53,6 +54,7 @@ export function Layers() {
   const patchCurrentScreen = useDesigner((s) => s.patchCurrentScreen);
   const moveSelected = useDesigner((s) => s.moveSelected);
   const deleteSelected = useDesigner((s) => s.deleteSelected);
+  const deleteCurrentScreen = useDesigner((s) => s.deleteCurrentScreen);
   const root = currentRoot(screen, currentScreenId);
   const active = screen.screens.find((item) => item.id === currentScreenId);
 
@@ -63,9 +65,22 @@ export function Layers() {
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Screens
           </span>
-          <Button size="icon-sm" variant="ghost" onClick={addScreen} aria-label="Add screen">
-            <Plus className="size-3.5" />
-          </Button>
+          <div className="flex gap-1">
+            <Button size="icon-sm" variant="ghost" onClick={addScreen} aria-label="Add screen">
+              <Plus className="size-3.5" />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Remove screen"
+              onClick={() => {
+                const message = deleteCurrentScreen();
+                if (message) toast.message(message);
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1">
           {screen.screens.map((item) => (
@@ -122,7 +137,15 @@ export function Layers() {
           <Button size="icon-sm" variant="ghost" onClick={() => moveSelected(1)} aria-label="Move down">
             <ChevronDown className="size-3.5" />
           </Button>
-          <Button size="icon-sm" variant="ghost" onClick={deleteSelected} aria-label="Delete">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => {
+              const message = deleteSelected();
+              if (message) toast.message(message);
+            }}
+            aria-label="Delete widget"
+          >
             <Trash2 className="size-3.5" />
           </Button>
         </div>

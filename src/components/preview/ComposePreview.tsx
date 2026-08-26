@@ -111,17 +111,69 @@ function clipClass(clip?: ModifierSpec["clip"]) {
 }
 
 function modifierStyle(modifiers: ModifierSpec): CSSProperties {
+  const background =
+    modifiers.backgroundHex ||
+    (modifiers.backgroundToken ? COLOR_VAR[modifiers.backgroundToken] : undefined);
+  const borderColor = modifiers.borderToken ? COLOR_VAR[modifiers.borderToken] : undefined;
   return {
     width: modifiers.fillMaxWidth ? "100%" : dp(modifiers.widthDp),
     height: modifiers.fillMaxHeight ? "100%" : dp(modifiers.heightDp),
     flex: modifiers.weight ? modifiers.weight : undefined,
+    opacity: modifiers.alpha == null ? undefined : modifiers.alpha,
+    transform: [
+      modifiers.offsetXDp || modifiers.offsetYDp
+        ? `translate(${modifiers.offsetXDp ?? 0}px, ${modifiers.offsetYDp ?? 0}px)`
+        : "",
+      modifiers.rotationDeg ? `rotate(${modifiers.rotationDeg}deg)` : "",
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined,
+    background,
+    border:
+      modifiers.borderWidthDp && borderColor
+        ? `${modifiers.borderWidthDp}px solid ${borderColor}`
+        : undefined,
+    boxShadow:
+      modifiers.elevationDp && modifiers.elevationDp > 0
+        ? `0 ${Math.max(1, modifiers.elevationDp / 3)}px ${modifiers.elevationDp}px rgb(0 0 0 / 18%)`
+        : undefined,
     ...paddingStyle(modifiers),
   };
 }
 
+function drawableStyle(node: UiNode): CSSProperties {
+  const drawable = node.drawable;
+  if (!drawable || drawable.type === "none") return {};
+  if (drawable.type === "color") {
+    return {
+      background: drawable.colorHex || (drawable.colorToken ? COLOR_VAR[drawable.colorToken] : undefined),
+    };
+  }
+  if (drawable.type === "gradient") {
+    return {
+      background: `linear-gradient(${drawable.angle ?? 145}deg, ${drawable.startHex ?? "#6750A4"}, ${drawable.endHex ?? "#1B4B8A"})`,
+    };
+  }
+  if (drawable.type === "image" && drawable.url) {
+    return {
+      backgroundImage: `url(${drawable.url})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    };
+  }
+  return {};
+}
+
 function animationClass(animation?: EnterAnimation) {
   if (!animation || animation.type === "none") return "";
-  return `m3-enter m3-enter-${animation.type}`;
+  return cn(
+    "m3-enter",
+    `m3-enter-${animation.type}`,
+    animation.easing === "emphasized" && "m3-ease-emphasized",
+    animation.easing === "bounce" && "m3-ease-bounce",
+    animation.easing === "linear" && "m3-ease-linear",
+    animation.repeat === "infinite" && "m3-repeat-infinite",
+  );
 }
 
 function animationStyle(animation?: EnterAnimation, index = 0): CSSProperties {
@@ -130,6 +182,10 @@ function animationStyle(animation?: EnterAnimation, index = 0): CSSProperties {
   return {
     animationDuration: `${animation.durationMs || 280}ms`,
     animationDelay: `${delay}ms`,
+    ["--m3-pulse-from" as string]: animation.colorFrom ?? undefined,
+    ["--m3-pulse-to" as string]: animation.colorTo ?? undefined,
+    ["--m3-move-x" as string]: `${animation.moveXDp ?? 36}px`,
+    ["--m3-move-y" as string]: `${animation.moveYDp ?? 12}px`,
   };
 }
 
@@ -553,8 +609,23 @@ export function ComposeNode({
     const text = String(resolveProp(node, "text", scope) ?? "");
     const style = (node.props.style as TextStyle) || "bodyLarge";
     const color = (node.props.color as ColorToken) || "onSurface";
+    const align = String(node.props.textAlign ?? "start") as "start" | "center" | "end";
+    const maxLines = Number(node.props.maxLines ?? 0);
+    const weight = Number(node.props.weight ?? 0);
     return wrap(
-      <div className={TYPE_SCALE[style]} style={{ color: COLOR_VAR[color] }}>
+      <div
+        className={TYPE_SCALE[style]}
+        style={{
+          color: COLOR_VAR[color],
+          textAlign: align === "center" ? "center" : align === "end" ? "right" : "left",
+          fontWeight: weight || undefined,
+          display: maxLines ? "-webkit-box" : undefined,
+          WebkitLineClamp: maxLines || undefined,
+          WebkitBoxOrient: maxLines ? "vertical" : undefined,
+          overflow: maxLines || node.props.overflow === "ellipsis" ? "hidden" : undefined,
+          textOverflow: node.props.overflow === "ellipsis" || maxLines ? "ellipsis" : undefined,
+        }}
+      >
         {text}
       </div>,
     );
@@ -566,7 +637,14 @@ export function ComposeNode({
     return wrap(
       url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={String(node.props.alt ?? "")} className="h-full w-full object-cover" />
+        <img
+          src={url}
+          alt={String(node.props.alt ?? "")}
+          className={cn(
+            "h-full w-full",
+            String(node.props.contentScale ?? "crop") === "fit" ? "object-contain" : "object-cover",
+          )}
+        />
       ) : (
         <div
           className="flex h-full min-h-[72px] w-full items-end p-2"
@@ -740,6 +818,7 @@ function NodeShell({
       )}
       style={{
         ...modifierStyle(node.modifiers),
+        ...drawableStyle(node),
         ...animationStyle(node.animation, itemIndex),
         ...extraStyle,
         touchAction: runAction ? "none" : undefined,

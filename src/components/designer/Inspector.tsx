@@ -3,9 +3,13 @@
 import type { ReactNode } from "react";
 import { BINDABLE_PROPS } from "@/lib/catalog";
 import { flattenSources } from "@/lib/bindings";
+import { bindableComposeProps } from "@/lib/model";
 import type {
   ActionType,
+  AnimationEasing,
+  AnimationRepeat,
   ColorToken,
+  DrawableType,
   EnterAnimationType,
   IconName,
   Interaction,
@@ -17,6 +21,7 @@ import type {
 import { TOUCH_EVENTS } from "@/lib/schema";
 import { interactionsOf } from "@/lib/interactions";
 import { AssetUpload } from "./AssetUpload";
+import { ModelBrowser } from "./ModelBrowser";
 import { useDesigner } from "@/lib/store";
 import { currentRoot } from "@/lib/document";
 import { findNode } from "@/lib/tree";
@@ -35,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const TEXT_STYLES: TextStyle[] = [
   "displayLarge",
@@ -75,7 +81,25 @@ const ICONS: IconName[] = [
   "tune",
 ];
 
-const ANIMATIONS: EnterAnimationType[] = ["none", "fade", "slideUp", "slideLeft", "scale"];
+const ANIMATIONS: EnterAnimationType[] = [
+  "none",
+  "fade",
+  "slideUp",
+  "slideDown",
+  "slideLeft",
+  "slideRight",
+  "slideOutUp",
+  "slideOutLeft",
+  "scale",
+  "bounce",
+  "bounceIn",
+  "colorPulse",
+  "elevationPulse",
+  "cardSlide",
+];
+const EASINGS: AnimationEasing[] = ["standard", "emphasized", "bounce", "linear"];
+const REPEATS: AnimationRepeat[] = ["none", "infinite"];
+const DRAWABLES: DrawableType[] = ["none", "color", "gradient", "image"];
 const VISIBILITY: VisibleWhen[] = ["always", "ready", "loading", "error", "empty", "invalid"];
 const ACTIONS: ActionType[] = ["none", "navigate", "back", "submitForm", "retry", "openUrl", "callApi"];
 
@@ -97,6 +121,8 @@ export function Inspector() {
   const currentScreenId = useDesigner((s) => s.currentScreenId);
   const selectedId = useDesigner((s) => s.selectedId);
   const patchNode = useDesigner((s) => s.patchNode);
+  const deleteSelected = useDesigner((s) => s.deleteSelected);
+  const clearSelectedWiring = useDesigner((s) => s.clearSelectedWiring);
   const previewData = useDesigner((s) => s.previewData);
   const root = currentRoot(screen, currentScreenId);
   const node = selectedId ? findNode(root, selectedId) : null;
@@ -120,7 +146,10 @@ export function Inspector() {
     patchNode(node.id, { bindings: next });
   };
 
-  const bindable = BINDABLE_PROPS[node.type] ?? [];
+  const bindable = BINDABLE_PROPS[node.type] ?? bindableComposeProps(node.type).map((item) => ({
+    key: item.key,
+    label: item.label,
+  }));
 
   return (
     <Tabs defaultValue="props" className="flex h-full flex-col">
@@ -130,6 +159,28 @@ export function Inspector() {
           <Badge variant="secondary" className="font-mono text-[10px]">
             {node.id}
           </Badge>
+        </div>
+        <div className="mb-2 flex gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const message = clearSelectedWiring();
+              if (message) toast.message(message);
+            }}
+          >
+            Clear binds
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => {
+              const message = deleteSelected();
+              if (message) toast.message(message);
+            }}
+          >
+            Remove widget
+          </Button>
         </div>
         <TabsList className="w-full">
           <TabsTrigger value="props" className="flex-1">
@@ -149,6 +200,8 @@ export function Inspector() {
       <ScrollArea className="flex-1">
         <TabsContent value="props" className="space-y-4 p-3">
           <TypeFields node={node} setProp={setProp} />
+          <ComposeLayout node={node} patchNode={patchNode} />
+          <DrawableFields node={node} patchNode={patchNode} />
           <Field label="Fill width">
             <Switch
               checked={Boolean(node.modifiers.fillMaxWidth)}
@@ -304,25 +357,42 @@ export function Inspector() {
               <Field key={field.key} label={`${field.label} path`}>
                 <Input
                   list="binding-paths"
-                  placeholder="catalog.storeName or item.title"
-                  value={node.bindings?.[field.key] ?? ""}
-                  onChange={(e) => setBinding(field.key, e.target.value)}
+                  placeholder="news.articles.0.title or item.title"
+                  value={field.key === "itemBinding" ? (node.itemBinding ?? "") : (node.bindings?.[field.key] ?? "")}
+                  onChange={(e) => {
+                    if (field.key === "itemBinding") patchNode(node.id, { itemBinding: e.target.value });
+                    else setBinding(field.key, e.target.value);
+                  }}
                 />
               </Field>
             ))
           )}
+          <ModelBrowser
+            data={previewData}
+            nodeType={node.type}
+            bindings={node.bindings}
+            itemBinding={node.itemBinding}
+            onPick={(path, key) => {
+              if (key === "itemBinding") {
+                patchNode(node.id, { itemBinding: path });
+              } else {
+                setBinding(key, path);
+              }
+              toast.success(`Bound ${key} → ${path}`);
+            }}
+          />
           <datalist id="binding-paths">
             {paths.map((path) => (
               <option key={path} value={path} />
             ))}
             <option value="item.title" />
-            <option value="item.subtitle" />
-            <option value="item.price" />
-            <option value="item.accent" />
+            <option value="item.description" />
             <option value="item.image" />
+            <option value="item.accent" />
+            <option value="item.url" />
           </datalist>
           <p className="text-xs leading-5 text-muted-foreground">
-            Paths are dotted JSON, rooted at each data source id. Inside a bound list, use <code>item.*</code> for the current row.
+            Click a field from the live/mock JSON to bind it. Compose properties sit next to network paths so you can map <code>Text(text)</code> to <code>item.title</code> without guessing.
           </p>
         </TabsContent>
         <TabsContent value="motion" className="space-y-4 p-3">
@@ -333,6 +403,7 @@ export function Inspector() {
                 if (!value) return;
                 patchNode(node.id, {
                   animation: {
+                    ...node.animation,
                     type: value as EnterAnimationType,
                     durationMs: node.animation?.durationMs ?? 280,
                     delayMs: node.animation?.delayMs ?? 0,
@@ -356,7 +427,7 @@ export function Inspector() {
           <Field label={`Duration ${node.animation?.durationMs ?? 280}ms`}>
             <Slider
               min={80}
-              max={800}
+              max={2000}
               step={20}
               value={[node.animation?.durationMs ?? 280]}
               onValueChange={(value) => {
@@ -405,9 +476,169 @@ export function Inspector() {
                     durationMs: node.animation?.durationMs ?? 280,
                     delayMs: node.animation?.delayMs ?? 0,
                     staggerMs,
+                    easing: node.animation?.easing,
+                    repeat: node.animation?.repeat,
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: node.animation?.colorTo,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: node.animation?.moveYDp,
                   },
                 });
               }}
+            />
+          </Field>
+          <Field label="Easing">
+            <Select
+              value={node.animation?.easing ?? "standard"}
+              onValueChange={(value) =>
+                value &&
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "fade",
+                    durationMs: node.animation?.durationMs ?? 280,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 40,
+                    easing: value as AnimationEasing,
+                    repeat: node.animation?.repeat,
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: node.animation?.colorTo,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: node.animation?.moveYDp,
+                  },
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EASINGS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Repeat">
+            <Select
+              value={node.animation?.repeat ?? "none"}
+              onValueChange={(value) =>
+                value &&
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "colorPulse",
+                    durationMs: node.animation?.durationMs ?? 280,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 40,
+                    easing: node.animation?.easing,
+                    repeat: value as AnimationRepeat,
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: node.animation?.colorTo,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: node.animation?.moveYDp,
+                  },
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REPEATS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Color pulse from">
+            <Input
+              value={node.animation?.colorFrom ?? ""}
+              placeholder="#FFFFFF"
+              onChange={(e) =>
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "colorPulse",
+                    durationMs: node.animation?.durationMs ?? 900,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 0,
+                    easing: node.animation?.easing,
+                    repeat: node.animation?.repeat ?? "infinite",
+                    colorFrom: e.target.value,
+                    colorTo: node.animation?.colorTo,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: node.animation?.moveYDp,
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Color pulse to">
+            <Input
+              value={node.animation?.colorTo ?? ""}
+              placeholder="#E8DEF8"
+              onChange={(e) =>
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "colorPulse",
+                    durationMs: node.animation?.durationMs ?? 900,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 0,
+                    easing: node.animation?.easing,
+                    repeat: node.animation?.repeat ?? "infinite",
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: e.target.value,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: node.animation?.moveYDp,
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Card / slide offset X">
+            <Input
+              type="number"
+              value={node.animation?.moveXDp ?? 36}
+              onChange={(e) =>
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "cardSlide",
+                    durationMs: node.animation?.durationMs ?? 420,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 40,
+                    easing: "bounce",
+                    repeat: node.animation?.repeat,
+                    moveXDp: Number(e.target.value),
+                    moveYDp: node.animation?.moveYDp,
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: node.animation?.colorTo,
+                  },
+                })
+              }
+            />
+          </Field>
+          <Field label="Card / slide offset Y">
+            <Input
+              type="number"
+              value={node.animation?.moveYDp ?? 12}
+              onChange={(e) =>
+                patchNode(node.id, {
+                  animation: {
+                    type: node.animation?.type ?? "cardSlide",
+                    durationMs: node.animation?.durationMs ?? 420,
+                    delayMs: node.animation?.delayMs ?? 0,
+                    staggerMs: node.animation?.staggerMs ?? 40,
+                    easing: "bounce",
+                    repeat: node.animation?.repeat,
+                    moveXDp: node.animation?.moveXDp,
+                    moveYDp: Number(e.target.value),
+                    colorFrom: node.animation?.colorFrom,
+                    colorTo: node.animation?.colorTo,
+                  },
+                })
+              }
             />
           </Field>
         </TabsContent>
@@ -454,6 +685,44 @@ function TypeFields({
                   {color}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Align">
+          <Select value={String(node.props.textAlign ?? "start")} onValueChange={(v) => v && setProp("textAlign", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="start">start</SelectItem>
+              <SelectItem value="center">center</SelectItem>
+              <SelectItem value="end">end</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Max lines">
+          <Input type="number" value={Number(node.props.maxLines ?? 0)} onChange={(e) => setProp("maxLines", Number(e.target.value))} />
+        </Field>
+        <Field label="Overflow">
+          <Select value={String(node.props.overflow ?? "clip")} onValueChange={(v) => v && setProp("overflow", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="clip">clip</SelectItem>
+              <SelectItem value="ellipsis">ellipsis</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Weight">
+          <Select value={String(node.props.weight ?? "400")} onValueChange={(v) => v && setProp("weight", Number(v))}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="400">400</SelectItem>
+              <SelectItem value="500">500</SelectItem>
+              <SelectItem value="700">700</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -618,6 +887,17 @@ function TypeFields({
         <Field label="Placeholder URL">
           <Input value={String(node.props.url ?? "")} onChange={(e) => setProp("url", e.target.value)} />
         </Field>
+        <Field label="Content scale">
+          <Select value={String(node.props.contentScale ?? "crop")} onValueChange={(v) => v && setProp("contentScale", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="crop">crop (ContentScale.Crop)</SelectItem>
+              <SelectItem value="fit">fit (ContentScale.Fit)</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
         <p className="text-xs text-muted-foreground">
           This file is the empty-state art. Bind Image URL to an API field (item.image) and the live response replaces it.
         </p>
@@ -743,6 +1023,274 @@ function InteractionEditor({
             ))}
           </SelectContent>
         </Select>
+      ) : null}
+    </div>
+  );
+}
+
+function ComposeLayout({
+  node,
+  patchNode,
+}: {
+  node: UiNode;
+  patchNode: (id: string, patch: Partial<UiNode>) => void;
+}) {
+  const m = node.modifiers;
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Compose modifiers
+      </div>
+      <Field label="Width dp">
+        <Input
+          type="number"
+          value={m.widthDp == null ? "" : String(m.widthDp)}
+          placeholder="wrap"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, widthDp: e.target.value === "" ? undefined : Number(e.target.value) } })
+          }
+        />
+      </Field>
+      <Field label="Height dp">
+        <Input
+          type="number"
+          value={m.heightDp == null ? "" : String(m.heightDp)}
+          placeholder="wrap"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, heightDp: e.target.value === "" ? undefined : Number(e.target.value) } })
+          }
+        />
+      </Field>
+      <Field label="Fill height">
+        <Switch
+          checked={Boolean(m.fillMaxHeight)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, fillMaxHeight: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label={`Alpha ${m.alpha ?? 1}`}>
+        <Slider
+          min={0}
+          max={1}
+          step={0.05}
+          value={[m.alpha ?? 1]}
+          onValueChange={(value) => patchNode(node.id, { modifiers: { ...m, alpha: sliderNumber(value) } })}
+        />
+      </Field>
+      <Field label="Offset X / Y">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            value={m.offsetXDp ?? 0}
+            onChange={(e) => patchNode(node.id, { modifiers: { ...m, offsetXDp: Number(e.target.value) } })}
+          />
+          <Input
+            type="number"
+            value={m.offsetYDp ?? 0}
+            onChange={(e) => patchNode(node.id, { modifiers: { ...m, offsetYDp: Number(e.target.value) } })}
+          />
+        </div>
+      </Field>
+      <Field label="Rotation">
+        <Input
+          type="number"
+          value={m.rotationDeg ?? 0}
+          onChange={(e) => patchNode(node.id, { modifiers: { ...m, rotationDeg: Number(e.target.value) } })}
+        />
+      </Field>
+      <Field label="Elevation dp">
+        <Input
+          type="number"
+          value={m.elevationDp ?? 0}
+          onChange={(e) => patchNode(node.id, { modifiers: { ...m, elevationDp: Number(e.target.value) } })}
+        />
+      </Field>
+      <Field label="Clip">
+        <Select
+          value={m.clip ?? "none"}
+          onValueChange={(value) => value && patchNode(node.id, { modifiers: { ...m, clip: value as NonNullable<typeof m.clip> } })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["none", "extraSmall", "small", "medium", "large", "full"].map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Surface color token">
+        <Select
+          value={m.backgroundToken ?? "none"}
+          onValueChange={(value) =>
+            patchNode(node.id, {
+              modifiers: { ...m, backgroundToken: value === "none" ? undefined : (value as (typeof COLORS)[number]) },
+            })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">none</SelectItem>
+            {COLORS.map((color) => (
+              <SelectItem key={color} value={color}>
+                {color}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Surface hex">
+        <Input
+          value={m.backgroundHex ?? ""}
+          placeholder="#EADDFF"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, backgroundHex: e.target.value || undefined } })
+          }
+        />
+      </Field>
+      <Field label="Border width / token">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            value={m.borderWidthDp == null ? "" : String(m.borderWidthDp)}
+            placeholder="0"
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, borderWidthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+          <Select
+            value={m.borderToken ?? "outline"}
+            onValueChange={(value) =>
+              value && patchNode(node.id, { modifiers: { ...m, borderToken: value as (typeof COLORS)[number] } })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COLORS.map((color) => (
+                <SelectItem key={color} value={color}>
+                  {color}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </Field>
+      <Field label="Weight (Row/Column)">
+        <Input
+          type="number"
+          value={m.weight == null ? "" : String(m.weight)}
+          placeholder="none"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, weight: e.target.value === "" ? undefined : Number(e.target.value) } })
+          }
+        />
+      </Field>
+    </div>
+  );
+}
+
+function DrawableFields({
+  node,
+  patchNode,
+}: {
+  node: UiNode;
+  patchNode: (id: string, patch: Partial<UiNode>) => void;
+}) {
+  const drawable = node.drawable ?? { type: "none" as const };
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Drawable</div>
+      <Field label="Background">
+        <Select
+          value={drawable.type}
+          onValueChange={(value) =>
+            value && patchNode(node.id, { drawable: { ...drawable, type: value as DrawableType } })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DRAWABLES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {drawable.type === "color" ? (
+        <>
+          <Field label="Color token">
+            <Select
+              value={drawable.colorToken ?? "primaryContainer"}
+              onValueChange={(value) =>
+                value &&
+                patchNode(node.id, {
+                  drawable: { ...drawable, colorToken: value as (typeof COLORS)[number] },
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COLORS.map((color) => (
+                  <SelectItem key={color} value={color}>
+                    {color}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Color hex">
+            <Input
+              value={drawable.colorHex ?? ""}
+              placeholder="#EADDFF"
+              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, colorHex: e.target.value } })}
+            />
+          </Field>
+        </>
+      ) : null}
+      {drawable.type === "gradient" ? (
+        <>
+          <Field label="Start">
+            <Input
+              value={drawable.startHex ?? "#6750A4"}
+              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, startHex: e.target.value } })}
+            />
+          </Field>
+          <Field label="End">
+            <Input
+              value={drawable.endHex ?? "#1B4B8A"}
+              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, endHex: e.target.value } })}
+            />
+          </Field>
+          <Field label="Angle">
+            <Input
+              type="number"
+              value={drawable.angle ?? 145}
+              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, angle: Number(e.target.value) } })}
+            />
+          </Field>
+        </>
+      ) : null}
+      {drawable.type === "image" ? (
+        <Field label="Drawable image">
+          <AssetUpload
+            kind="image"
+            currentUrl={drawable.url ?? ""}
+            onPicked={(url) => patchNode(node.id, { drawable: { ...drawable, type: "image", url } })}
+          />
+        </Field>
       ) : null}
     </div>
   );

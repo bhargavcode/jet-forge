@@ -40,16 +40,13 @@ export function updateNode(root: UiNode, id: string, patch: Partial<UiNode>): Ui
       ...patch,
       props: patch.props ? { ...node.props, ...patch.props } : node.props,
       modifiers: patch.modifiers ? { ...node.modifiers, ...patch.modifiers } : node.modifiers,
-      bindings:
-        patch.bindings === undefined
-          ? node.bindings
-          : { ...node.bindings, ...patch.bindings },
+      bindings: patch.bindings === undefined ? node.bindings : patch.bindings,
       onClick: patch.onClick !== undefined ? patch.onClick : node.onClick,
       interactions: patch.interactions !== undefined ? patch.interactions : node.interactions,
-      formField:
-        patch.formField === undefined
-          ? node.formField
-          : { ...node.formField, ...patch.formField },
+      formField: "formField" in patch ? patch.formField : node.formField,
+      itemBinding: "itemBinding" in patch ? patch.itemBinding : node.itemBinding,
+      drawable: patch.drawable === undefined ? node.drawable : patch.drawable,
+      animation: patch.animation === undefined ? node.animation : patch.animation,
       visibleWhen: patch.visibleWhen !== undefined ? patch.visibleWhen : node.visibleWhen,
     };
   });
@@ -102,6 +99,68 @@ export function isContainer(type: NodeType): boolean {
     type === "LazyColumn" ||
     type === "NavigationBar"
   );
+}
+
+export function collectIds(node: UiNode): string[] {
+  const ids = [node.id];
+  for (const child of node.children ?? []) ids.push(...collectIds(child));
+  return ids;
+}
+
+export function countWiring(node: UiNode) {
+  let bindings = 0;
+  let wires = 0;
+  let widgets = 0;
+  walk(node, (current) => {
+    widgets += 1;
+    bindings += Object.keys(current.bindings ?? {}).filter((key) => current.bindings?.[key]).length;
+    if (current.itemBinding) bindings += 1;
+    wires += (current.interactions ?? []).filter((item) => item.action.type !== "none").length;
+    if ((!current.interactions || current.interactions.length === 0) && current.onClick && current.onClick.type !== "none") {
+      wires += 1;
+    }
+  });
+  return { widgets, bindings, wires };
+}
+
+export function clearNodeWiring(node: UiNode): UiNode {
+  return {
+    ...node,
+    bindings: {},
+    interactions: [],
+    onClick: { type: "none" },
+    formField: undefined,
+    itemBinding: undefined,
+    children: node.children?.map(clearNodeWiring),
+  };
+}
+
+export function stripWiresToScreens(root: UiNode, removedScreenIds: Set<string>): UiNode {
+  return mapTree(root, (node) => {
+    const interactions = (node.interactions ?? []).filter((item) => {
+      const target = item.action.screenId;
+      return !target || !removedScreenIds.has(target);
+    });
+    const onClick =
+      node.onClick?.screenId && removedScreenIds.has(node.onClick.screenId)
+        ? { type: "none" as const }
+        : node.onClick;
+    return { ...node, interactions, onClick };
+  });
+}
+
+export function stripBindingsToSource(root: UiNode, sourceId: string): UiNode {
+  return mapTree(root, (node) => {
+    const bindings = { ...node.bindings };
+    for (const [key, path] of Object.entries(bindings)) {
+      if (path === sourceId || path.startsWith(`${sourceId}.`)) delete bindings[key];
+    }
+    const itemBinding =
+      node.itemBinding && (node.itemBinding === sourceId || node.itemBinding.startsWith(`${sourceId}.`))
+        ? undefined
+        : node.itemBinding;
+    return { ...node, bindings, itemBinding };
+  });
 }
 
 export function acceptsChild(parent: NodeType, child: NodeType): boolean {

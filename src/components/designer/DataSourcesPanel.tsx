@@ -18,6 +18,7 @@ import { useDesigner } from "@/lib/store";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { BodyMode, HttpMethod } from "@/lib/schema";
+import { modelFields } from "@/lib/model";
 import { KeyValueEditor } from "./KeyValueEditor";
 
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -29,6 +30,7 @@ export function DataSourcesPanel() {
   const patchDataSource = useDesigner((s) => s.patchDataSource);
   const removeDataSource = useDesigner((s) => s.removeDataSource);
   const previewErrors = useDesigner((s) => s.previewErrors);
+  const previewData = useDesigner((s) => s.previewData);
   const [activeId, setActiveId] = useState<string | null>(null);
   const selectedId =
     activeId && dataSources.some((source) => source.id === activeId)
@@ -36,6 +38,12 @@ export function DataSourcesPanel() {
       : (dataSources.find((source) => source.id === "news")?.id ?? dataSources[0]?.id);
   const source = dataSources.find((item) => item.id === selectedId);
   const bodyMode = source?.bodyMode ?? (source?.body ? "json" : "none");
+  const responseFields = source
+    ? modelFields(
+        source.id in previewData ? { [source.id]: previewData[source.id] } : {},
+        48,
+      )
+    : [];
 
   return (
     <div className="flex h-full flex-col">
@@ -207,6 +215,25 @@ export function DataSourcesPanel() {
                   Live fetch failed ({previewErrors[source.id]}). Canvas error state will show in Play unless mock fallback is on.
                 </p>
               ) : null}
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Response model
+                </Label>
+                {responseFields.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Run Live API (or fill mock JSON) to see response keys you can bind in the Inspector.
+                  </p>
+                ) : (
+                  <div className="max-h-40 space-y-0.5 overflow-auto rounded-md border p-1.5 font-mono text-[11px]">
+                    {responseFields.map((field) => (
+                      <div key={field.path} className="flex items-center gap-2">
+                        <span className="w-12 shrink-0 text-[9px] uppercase text-muted-foreground">{field.kind}</span>
+                        <span className="min-w-0 flex-1 truncate">{field.path}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : null}
         </div>

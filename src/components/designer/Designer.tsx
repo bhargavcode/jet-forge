@@ -18,6 +18,7 @@ import { DataSourcesPanel } from "./DataSourcesPanel";
 import { Toolbar } from "./Toolbar";
 import { PhoneFrame } from "./PhoneFrame";
 import { FlowBoard } from "./FlowBoard";
+import { HistoryHotkeys } from "./HistoryHotkeys";
 import { cn } from "@/lib/utils";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -116,6 +117,7 @@ export function Designer() {
       onDragEnd={onDragEnd}
     >
       <div className="flex min-h-0 flex-1 flex-col">
+        <HistoryHotkeys />
         <Toolbar />
         <div className="flex min-h-0 flex-1">
           <aside className="hidden w-[240px] shrink-0 flex-col border-r md:flex">
