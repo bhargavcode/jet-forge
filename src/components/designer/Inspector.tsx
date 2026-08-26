@@ -156,7 +156,7 @@ export function Inspector() {
   }));
 
   return (
-    <Tabs defaultValue="props" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden">
+    <Tabs defaultValue="props" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-background">
       <div className="shrink-0 border-b px-3 pt-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="truncate text-sm font-semibold">{node.type}</div>
@@ -201,7 +201,7 @@ export function Inspector() {
           </TabsTrigger>
         </TabsList>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <TabsContent value="props" className="mt-0 space-y-4 p-3">
           <TypeFields node={node} setProp={setProp} />
           <ComposeLayout node={node} patchNode={patchNode} />

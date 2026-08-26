@@ -24,7 +24,7 @@ import { CanvasStage } from "./CanvasStage";
 import { HorizontalResize, VerticalResize } from "./PaneSplit";
 import { cn } from "@/lib/utils";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDesigner } from "@/lib/store";
 import { CATALOG } from "@/lib/catalog";
 import { currentRoot } from "@/lib/document";
@@ -170,7 +170,7 @@ export function Designer() {
         <Toolbar />
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <aside
-            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-r md:flex"
+            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-r bg-background md:flex"
             style={{ width: layout.leftW }}
           >
             <div className="min-h-0 overflow-hidden" style={{ flex: `${layout.leftSplit} 1 0` }}>
@@ -245,10 +245,10 @@ export function Designer() {
           </main>
           <VerticalResize className="hidden lg:block" onDelta={(dx) => setLayout({ rightW: layout.rightW - dx })} />
           <aside
-            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-l lg:flex"
+            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-l bg-background lg:flex"
             style={{ width: layout.rightW }}
           >
-            <div className="min-h-0 overflow-hidden" style={{ flex: `${layout.rightSplit} 1 0` }}>
+            <div className="min-h-0 overflow-hidden bg-background" style={{ flex: `${layout.rightSplit} 1 0` }}>
               <Inspector />
             </div>
             <HorizontalResize
@@ -256,13 +256,25 @@ export function Designer() {
                 setLayout({ rightSplit: layout.rightSplit + dy / 600 });
               }}
             />
-            <div className="flex min-h-0 flex-col overflow-hidden" style={{ flex: `${1 - layout.rightSplit} 1 0` }}>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <DataSourcesPanel />
-              </div>
-              <div className="max-h-[46%] min-h-0 overflow-auto">
-                <KotlinModelsPanel />
-              </div>
+            <div className="flex min-h-0 flex-col overflow-hidden bg-background" style={{ flex: `${1 - layout.rightSplit} 1 0` }}>
+              <Tabs defaultValue="request" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden">
+                <div className="shrink-0 border-b px-2 pt-2">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="request" className="flex-1">
+                      Request
+                    </TabsTrigger>
+                    <TabsTrigger value="models" className="flex-1">
+                      Models
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+                <TabsContent value="request" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                  <DataSourcesPanel />
+                </TabsContent>
+                <TabsContent value="models" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                  <KotlinModelsPanel />
+                </TabsContent>
+              </Tabs>
             </div>
           </aside>
         </div>

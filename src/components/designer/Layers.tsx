@@ -4,10 +4,19 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { UiNode } from "@/lib/schema";
 import { currentRoot } from "@/lib/document";
 import { interactionsOf } from "@/lib/interactions";
+import { arrayPaths } from "@/lib/model";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -73,13 +82,21 @@ export function Layers() {
   const moveSelected = useDesigner((s) => s.moveSelected);
   const deleteSelected = useDesigner((s) => s.deleteSelected);
   const deleteCurrentScreen = useDesigner((s) => s.deleteCurrentScreen);
+  const addDataSource = useDesigner((s) => s.addDataSource);
+  const previewData = useDesigner((s) => s.previewData);
   const root = currentRoot(screen, currentScreenId);
   const active = screen.screens.find((item) => item.id === currentScreenId);
+  const selectedSources = new Set(active?.dataSourceIds ?? []);
+  const pathOptions = [
+    ...arrayPaths(previewData),
+    ...(screen.dataModels ?? []).map((model) => model.listPath).filter(Boolean),
+    active?.emptyPath,
+  ].filter((path, index, all): path is string => Boolean(path) && all.indexOf(path) === index);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b px-3 py-2">
-        <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex min-h-0 max-h-[52%] flex-col overflow-hidden border-b">
+        <div className="flex shrink-0 items-center justify-between px-3 py-2">
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Screens
           </span>
@@ -100,79 +117,149 @@ export function Layers() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1">
-          {screen.screens.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setCurrentScreen(item.id)}
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                item.id === currentScreenId ? "bg-primary text-primary-foreground" : "bg-muted",
-              )}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 px-3 pb-3">
+            <div className="flex flex-wrap gap-1">
+              {screen.screens.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setCurrentScreen(item.id)}
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    item.id === currentScreenId ? "bg-primary text-primary-foreground" : "bg-muted",
+                  )}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+            {active ? (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Screen name
+                  </Label>
+                  <Input
+                    value={active.name}
+                    onChange={(e) => patchCurrentScreen({ name: e.target.value })}
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Route
+                  </Label>
+                  <Input
+                    value={active.route}
+                    onChange={(e) => patchCurrentScreen({ route: e.target.value })}
+                    placeholder="/headlines"
+                    className="h-7 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Data sources
+                    </Label>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={addDataSource}>
+                      <Plus className="size-3" />
+                      Add API
+                    </Button>
+                  </div>
+                  {screen.dataSources.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">No APIs yet. Add one to bind this screen.</p>
+                  ) : (
+                    <div className="space-y-1 rounded-md border p-1.5">
+                      {screen.dataSources.map((source) => {
+                        const checked = selectedSources.has(source.id);
+                        return (
+                          <label key={source.id} className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const next = new Set(selectedSources);
+                                if (checked) next.delete(source.id);
+                                else next.add(source.id);
+                                patchCurrentScreen({ dataSourceIds: [...next] });
+                              }}
+                            />
+                            <span className="font-mono">{source.id}</span>
+                            <span className="truncate text-muted-foreground">{source.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Empty list path
+                  </Label>
+                  <Select
+                    value={active.emptyPath || "__none__"}
+                    onValueChange={(value) =>
+                      patchCurrentScreen({
+                        emptyPath: !value || value === "__none__" ? undefined : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-8 font-mono text-xs">
+                      <SelectValue placeholder="Choose a list from the API" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {pathOptions.map((path) => (
+                        <SelectItem key={path} value={path}>
+                          {path}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={active.emptyPath ?? ""}
+                    onChange={(e) => patchCurrentScreen({ emptyPath: e.target.value || undefined })}
+                    placeholder="Or type a new path, e.g. news.articles"
+                    className="h-7 font-mono text-xs"
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
+        </ScrollArea>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Layers
+          </span>
+          <div className="flex gap-1">
+            <Button size="icon-sm" variant="ghost" onClick={() => moveSelected(-1)} aria-label="Move up">
+              <ChevronUp className="size-3.5" />
+            </Button>
+            <Button size="icon-sm" variant="ghost" onClick={() => moveSelected(1)} aria-label="Move down">
+              <ChevronDown className="size-3.5" />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => {
+                const message = deleteSelected();
+                if (message) toast.message(message);
+              }}
+              aria-label="Delete widget"
             >
-              {item.name}
-            </button>
-          ))}
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
         </div>
-        {active ? (
-          <>
-            <Input
-              value={active.route}
-              onChange={(e) => patchCurrentScreen({ route: e.target.value })}
-              className="h-7 font-mono text-xs"
-            />
-            <Input
-              value={(active.dataSourceIds ?? []).join(",")}
-              onChange={(e) =>
-                patchCurrentScreen({
-                  dataSourceIds: e.target.value
-                    .split(",")
-                    .map((part) => part.trim())
-                    .filter(Boolean),
-                })
-              }
-              placeholder="data sources: news,search"
-              className="h-7 font-mono text-xs"
-            />
-            <Input
-              value={active.emptyPath ?? ""}
-              onChange={(e) => patchCurrentScreen({ emptyPath: e.target.value })}
-              placeholder="empty path: news.articles"
-              className="h-7 font-mono text-xs"
-            />
-          </>
-        ) : null}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-2">
+            <LayerRow node={root} depth={0} />
+          </div>
+        </ScrollArea>
       </div>
-      <div className="flex items-center justify-between border-b px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Layers
-        </span>
-        <div className="flex gap-1">
-          <Button size="icon-sm" variant="ghost" onClick={() => moveSelected(-1)} aria-label="Move up">
-            <ChevronUp className="size-3.5" />
-          </Button>
-          <Button size="icon-sm" variant="ghost" onClick={() => moveSelected(1)} aria-label="Move down">
-            <ChevronDown className="size-3.5" />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => {
-              const message = deleteSelected();
-              if (message) toast.message(message);
-            }}
-            aria-label="Delete widget"
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          <LayerRow node={root} depth={0} />
-        </div>
-      </ScrollArea>
     </div>
   );
 }

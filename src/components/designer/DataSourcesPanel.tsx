@@ -46,7 +46,7 @@ export function DataSourcesPanel() {
     : [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Request
@@ -76,7 +76,7 @@ export function DataSourcesPanel() {
           </button>
         ))}
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-4 p-3">
           {dataSources.length === 0 ? (
             <p className="text-sm text-muted-foreground">

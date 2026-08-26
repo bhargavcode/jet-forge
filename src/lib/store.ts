@@ -95,6 +95,9 @@ interface DesignerState {
   removeDataModel: (id: string) => void;
   setActiveModelId: (id: string | null) => void;
   addAsset: (asset: AssetRef) => void;
+  publishedId: string | null;
+  publishedFingerprint: string | null;
+  markPublished: (id: string) => void;
   undo: () => void;
   redo: () => void;
   reset: () => void;
@@ -114,6 +117,19 @@ function cloneSnapshot(state: { screen: ScreenDocument; currentScreenId: string;
 }
 
 let lastPatch: { id: string; at: number } | null = null;
+
+export function documentFingerprint(screen: ScreenDocument) {
+  return JSON.stringify({
+    name: screen.name,
+    theme: screen.theme,
+    screens: screen.screens,
+    dataSources: screen.dataSources,
+    dataModels: screen.dataModels,
+    activeModelId: screen.activeModelId,
+    startScreenId: screen.startScreenId,
+    root: screen.root?.id,
+  });
+}
 
 export const useDesigner = create<DesignerState>()(
   persist(
@@ -143,6 +159,8 @@ export const useDesigner = create<DesignerState>()(
         layout: { leftW: 240, rightW: 320, leftSplit: 0.5, rightSplit: 0.58 },
         canvasZoom: 1,
         canvasWire: null,
+        publishedId: null,
+        publishedFingerprint: null,
         select: (id) => set({ selectedId: id }),
         setName: (name) => set({ ...historyPatch(), screen: { ...get().screen, name } }),
         setTheme: (theme) => set({ ...historyPatch(), screen: { ...get().screen, theme } }),
@@ -450,6 +468,12 @@ export const useDesigner = create<DesignerState>()(
           const assets = [asset, ...(screen.assets ?? []).filter((item) => item.id !== asset.id)];
           set({ ...historyPatch(), screen: { ...screen, assets } });
         },
+        markPublished: (id) => {
+          set({
+            publishedId: id,
+            publishedFingerprint: documentFingerprint(get().screen),
+          });
+        },
         undo: () => {
           const { past, future } = get();
           const previous = past.at(-1);
@@ -491,6 +515,8 @@ export const useDesigner = create<DesignerState>()(
             playMode: false,
             canvasState: "auto",
             workspaceMode: "design",
+            publishedId: null,
+            publishedFingerprint: null,
           });
         },
         loadDocument: (screen) => {
@@ -506,7 +532,7 @@ export const useDesigner = create<DesignerState>()(
       };
     },
     {
-      name: "compose-studio-draft-v7",
+      name: "compose-studio-draft-v8",
       partialize: (state) => ({
         screen: state.screen,
         currentScreenId: state.currentScreenId,
@@ -514,6 +540,8 @@ export const useDesigner = create<DesignerState>()(
         liveData: state.liveData,
         layout: state.layout,
         canvasZoom: state.canvasZoom,
+        publishedId: state.publishedId,
+        publishedFingerprint: state.publishedFingerprint,
       }),
       merge: (persisted, current) => {
         const raw = (persisted as Partial<DesignerState>) ?? {};
@@ -527,6 +555,8 @@ export const useDesigner = create<DesignerState>()(
           future: [],
           layout: { ...current.layout, ...(raw.layout ?? {}) },
           canvasZoom: typeof raw.canvasZoom === "number" ? raw.canvasZoom : current.canvasZoom,
+          publishedId: raw.publishedId ?? null,
+          publishedFingerprint: raw.publishedFingerprint ?? null,
         };
       },
     },

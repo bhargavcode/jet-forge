@@ -28,9 +28,9 @@ export function KotlinModelsPanel() {
   const active = models.find((item) => item.id === activeModelId) ?? models[0];
 
   return (
-    <div className="space-y-3 border-t p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Kotlin data models
         </span>
         <Button size="sm" variant="outline" onClick={() => addDataModel()}>
@@ -38,6 +38,8 @@ export function KotlinModelsPanel() {
           Model
         </Button>
       </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+        <div className="space-y-3">
       {models.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">
           Add a <code>data class</code> so Bind can map Compose properties onto typed fields like{" "}
@@ -64,36 +66,45 @@ export function KotlinModelsPanel() {
       {active ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <Input
-              value={active.name}
-              onChange={(e) => patchDataModel(active.id, { name: e.target.value })}
-              className="h-7"
-            />
-            <Button size="icon-sm" variant="ghost" onClick={() => removeDataModel(active.id)}>
+            <div className="min-w-0 flex-1 space-y-1">
+              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Class name</Label>
+              <Input
+                value={active.name}
+                onChange={(e) => patchDataModel(active.id, { name: e.target.value })}
+                className="h-7"
+              />
+            </div>
+            <Button size="icon-sm" variant="ghost" className="mt-5" onClick={() => removeDataModel(active.id)}>
               <Trash2 className="size-3.5" />
             </Button>
           </div>
-          <Select
-            value={active.sourceId ?? ""}
-            onValueChange={(value) => value && patchDataModel(active.id, { sourceId: value })}
-          >
-            <SelectTrigger className="h-8">
-              <SelectValue placeholder="API source" />
-            </SelectTrigger>
-            <SelectContent>
-              {dataSources.map((source) => (
-                <SelectItem key={source.id} value={source.id}>
-                  {source.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            className="h-7 font-mono text-xs"
-            placeholder="List path: news.articles"
-            value={active.listPath ?? ""}
-            onChange={(e) => patchDataModel(active.id, { listPath: e.target.value })}
-          />
+          <div className="space-y-1">
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">API source</Label>
+            <Select
+              value={active.sourceId ?? ""}
+              onValueChange={(value) => value && patchDataModel(active.id, { sourceId: value })}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue placeholder="API source" />
+              </SelectTrigger>
+              <SelectContent>
+                {dataSources.map((source) => (
+                  <SelectItem key={source.id} value={source.id}>
+                    {source.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">List path</Label>
+            <Input
+              className="h-7 font-mono text-xs"
+              placeholder="news.articles"
+              value={active.listPath ?? ""}
+              onChange={(e) => patchDataModel(active.id, { listPath: e.target.value })}
+            />
+          </div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Kotlin</Label>
           <Textarea
             className="min-h-28 font-mono text-[11px]"
@@ -130,6 +141,8 @@ export function KotlinModelsPanel() {
           </Button>
         </div>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

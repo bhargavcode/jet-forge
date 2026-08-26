@@ -16,7 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SEED_OPTIONS } from "@/lib/theme";
-import { useDesigner } from "@/lib/store";
+import { documentFingerprint, useDesigner } from "@/lib/store";
 import type { CanvasState, WorkspaceMode } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
@@ -40,8 +40,11 @@ export function Toolbar() {
   const canRedo = useDesigner((s) => s.future.length > 0);
   const canvasZoom = useDesigner((s) => s.canvasZoom);
   const setCanvasZoom = useDesigner((s) => s.setCanvasZoom);
+  const publishedId = useDesigner((s) => s.publishedId);
+  const publishedFingerprint = useDesigner((s) => s.publishedFingerprint);
+  const markPublished = useDesigner((s) => s.markPublished);
   const [publishing, setPublishing] = useState(false);
-  const [publishedId, setPublishedId] = useState<string | null>(null);
+  const dirty = documentFingerprint(screen) !== publishedFingerprint;
 
   useEffect(() => {
     if (liveData) {
@@ -59,7 +62,7 @@ export function Toolbar() {
       });
       if (!res.ok) throw new Error(await res.text());
       const payload = (await res.json()) as { id: string; devicePath: string };
-      setPublishedId(payload.id);
+      markPublished(payload.id);
       toast.success("Screen published", {
         description: "Android can now fetch this document and bind the same APIs.",
       });
@@ -178,19 +181,19 @@ export function Toolbar() {
         US sample
       </Button>
       <Link href="/screens" className="text-xs font-medium text-muted-foreground hover:text-foreground">
-        Published
+        Library
       </Link>
       <HowItWorks />
-      <Button size="sm" onClick={() => void publish()} disabled={publishing}>
+      <Button size="sm" onClick={() => void publish()} disabled={publishing || !dirty}>
         <Upload className="size-3.5" />
-        {publishing ? "Publishing…" : "Publish"}
+        {publishing ? "Publishing…" : dirty ? "Publish" : "Published"}
       </Button>
       {publishedId ? (
         <Link
           href={`/device/${publishedId}`}
           className="text-xs font-medium text-primary underline-offset-4 hover:underline"
         >
-          Open device runtime
+          {dirty ? "Open last publish" : "Open device runtime"}
         </Link>
       ) : null}
     </header>

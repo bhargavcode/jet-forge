@@ -53,6 +53,12 @@ export function modelFields(data: Record<string, unknown>, limit = 140): ModelFi
   return out;
 }
 
+export function arrayPaths(data: Record<string, unknown>): string[] {
+  return modelFields(data)
+    .filter((field) => field.kind === "array")
+    .map((field) => field.path);
+}
+
 export function itemAlias(path: string): string {
   const match = path.match(/^(.*)\.(0|item)\.(.+)$/);
   if (!match) return path;
