@@ -1,19 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  MeasuringStrategy,
-  PointerSensor,
-  closestCorners,
-  pointerWithin,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+import { MouseSensor, TouchSensor, MeasuringStrategy, closestCorners, pointerWithin, DndContext, DragOverlay, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Palette } from "./Palette";
 import { Layers } from "./Layers";
 import { Inspector } from "./Inspector";
@@ -31,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDesigner } from "@/lib/store";
 import { CATALOG } from "@/lib/catalog";
 import { currentRoot } from "@/lib/document";
-import { acceptsChild, findNode, findParent, isContainer } from "@/lib/tree";
+import { acceptsChild, findNode, findParent, hostIdFromVirtual, isContainer, isVirtualNodeId } from "@/lib/tree";
 import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
 
@@ -95,8 +83,12 @@ export function Designer() {
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 4 },
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint:
+        workspaceMode === "prototype" ? { delay: 10_000, tolerance: 5 } : { delay: 120, tolerance: 8 },
     }),
   );
 
@@ -124,7 +116,10 @@ export function Designer() {
       | undefined;
     const over = event.over;
     if (!over) return;
-    const targetId = String(over.data.current?.targetId ?? over.id ?? "");
+    let targetId = String(over.data.current?.targetId ?? over.id ?? "");
+    if (isVirtualNodeId(targetId)) {
+      targetId = `${hostIdFromVirtual(targetId)}::content`;
+    }
     if (!targetId || targetId.startsWith("palette-") || (String(over.id).startsWith("layer-") && !over.data.current)) return;
 
     let parentId = targetId;
@@ -139,6 +134,7 @@ export function Designer() {
     const after = dropAfter(event);
 
     if (data?.source === "canvas" && data.nodeId) {
+      if (isVirtualNodeId(data.nodeId)) return;
       if (data.nodeId === parentId && kind !== "reorder") return;
       if (kind === "reorder") {
         const target = findNode(root, parentId);

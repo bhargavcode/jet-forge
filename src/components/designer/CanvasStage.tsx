@@ -87,15 +87,15 @@ export function CanvasStage({ children }: { children: ReactNode }) {
         pinch.current = null;
       }}
     >
-      <div
-        className="flex items-center justify-center"
-        style={{
-          width: 360 * scale,
-          height: 740 * scale,
-        }}
-      >
-        <div style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}>{children}</div>
-      </div>
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 360 * scale,
+            height: 740 * scale,
+          }}
+        >
+          <div style={{ zoom: scale, width: 360, height: 740 }}>{children}</div>
+        </div>
       <div className="absolute right-3 bottom-3 z-20 flex items-center gap-1 rounded-lg border bg-background/90 p-1 shadow-sm">
         <Button size="icon-sm" variant="ghost" title="Zoom out" onClick={() => setCanvasZoom(zoom - 0.1)}>
           <Minus className="size-3.5" />

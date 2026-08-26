@@ -136,7 +136,7 @@ export function createNode(type: NodeType): UiNode {
           color: type === "FilledButton" ? "onPrimary" : "primary",
           enabled: true,
         },
-        modifiers: { clip: "full" },
+        modifiers: { fillMaxWidth: type === "FilledButton", clip: "full" },
       };
     case "Chip":
       return {

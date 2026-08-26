@@ -105,6 +105,14 @@ export function moveChild(root: UiNode, id: string, direction: -1 | 1): UiNode {
   return updateNode(root, parent.id, { children });
 }
 
+export function isVirtualNodeId(id: string) {
+  return id.endsWith("-content");
+}
+
+export function hostIdFromVirtual(id: string) {
+  return isVirtualNodeId(id) ? id.slice(0, -"-content".length) : id;
+}
+
 export function isContainer(type: NodeType): boolean {
   return (
     type === "Scaffold" ||

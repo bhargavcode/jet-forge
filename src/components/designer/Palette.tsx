@@ -2,6 +2,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CATALOG, type CatalogItem } from "@/lib/catalog";
+import { isolateDragListeners } from "@/lib/dnd-bind";
 import { cn } from "@/lib/utils";
 import { GripVertical } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,20 +15,19 @@ function PaletteItem({ item, onAdd }: { item: CatalogItem; onAdd?: (type: NodeTy
   });
 
   return (
-    <button
-      type="button"
+    <div
       ref={setNodeRef}
-      {...listeners}
       {...attributes}
+      {...isolateDragListeners(listeners)}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg border border-transparent bg-muted/40 px-2 py-1.5 text-left text-sm hover:border-border hover:bg-muted",
+        "flex w-full cursor-grab items-center gap-2 rounded-lg border border-transparent bg-muted/40 px-2 py-1.5 text-left text-sm hover:border-border hover:bg-muted",
         isDragging && "opacity-40",
       )}
       onClick={() => onAdd?.(item.type)}
     >
       <GripVertical className="size-3.5 text-muted-foreground" />
       <span className="flex-1 truncate font-medium">{item.label}</span>
-    </button>
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import type { UiNode } from "@/lib/schema";
 import { currentRoot } from "@/lib/document";
 import { interactionsOf } from "@/lib/interactions";
 import { arrayPaths } from "@/lib/model";
+import { isolateDragListeners } from "@/lib/dnd-bind";
+import { isContainer } from "@/lib/tree";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,33 +41,44 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
   });
   const drop = useDroppable({
     id: `layer-drop-${node.id}`,
-    data: { kind: "reorder", targetId: node.id, nodeId: node.id },
+    data: {
+      kind: isContainer(node.type) ? "container" : "reorder",
+      targetId: node.id,
+      nodeId: node.id,
+    },
   });
 
   return (
     <>
-      <button
-        type="button"
+      <div
         ref={(el) => {
           drag.setNodeRef(el);
           drop.setNodeRef(el);
         }}
-        {...drag.listeners}
-        {...drag.attributes}
+        {...(node.type !== "Scaffold" ? isolateDragListeners(drag.listeners) : {})}
+        {...(node.type !== "Scaffold" ? drag.attributes : {})}
         onClick={() => select(node.id)}
         className={cn(
-          "flex w-full items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted",
+          "flex w-full cursor-grab items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted",
           selected && "bg-primary/10 text-primary",
           drop.isOver && "m3-drop-over",
           drag.isDragging && "opacity-40",
+          node.type === "Scaffold" && "cursor-default",
         )}
         style={{ paddingLeft: 8 + depth * 12 }}
+        role="button"
+        tabIndex={0}
       >
+        {node.type !== "Scaffold" ? (
+          <GripVertical className="mr-1 size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <span className="mr-1 w-3.5 shrink-0" />
+        )}
         <span className="truncate font-medium">{node.type}</span>
         <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
           {layerBadge(node)}
         </span>
-      </button>
+      </div>
       {node.children?.map((child) => (
         <LayerRow key={child.id} node={child} depth={depth + 1} />
       ))}

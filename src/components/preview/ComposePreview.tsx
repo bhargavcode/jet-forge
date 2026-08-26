@@ -34,7 +34,8 @@ import type {
   UiNode,
 } from "@/lib/schema";
 import { useDesigner } from "@/lib/store";
-import { isContainer } from "@/lib/tree";
+import { hostIdFromVirtual, isContainer, isVirtualNodeId } from "@/lib/tree";
+import { isolateDragListeners } from "@/lib/dnd-bind";
 import {
   contentJustify,
   cssTextAlign,
@@ -428,9 +429,10 @@ export function ComposeNode({
 
   if (node.type === "Column" || node.type === "LazyColumn") {
     const spacedBy = Number(node.props.spacedBy ?? 8);
+    const dropId = isVirtualNodeId(node.id) ? `${hostIdFromVirtual(node.id)}::content` : node.id;
     return wrap(
       <DropTarget
-        id={node.id}
+        id={dropId}
         disabled={!interactive}
         className={cn(
           node.modifiers.fillMaxHeight && "h-full min-h-0",
@@ -850,17 +852,19 @@ function NodeShell({
   const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consumed = useRef(false);
 
+  const dragLocked = !interactive || node.type === "Scaffold" || isVirtualNodeId(node.id);
   const drag = useDraggable({
     id: `canvas-${node.id}`,
     data: { source: "canvas", nodeId: node.id, type: node.type },
-    disabled: !interactive || node.type === "Scaffold",
+    disabled: dragLocked,
   });
+  const dropHost = isVirtualNodeId(node.id) ? `${hostIdFromVirtual(node.id)}::content` : node.id;
   const drop = useDroppable({
-    id: `node-${node.id}`,
+    id: isVirtualNodeId(node.id) ? `node-slot-${dropHost}` : `node-${node.id}`,
     data: {
-      kind: isContainer(node.type) ? "container" : "reorder",
-      targetId: node.id,
-      nodeId: node.id,
+      kind: isVirtualNodeId(node.id) || isContainer(node.type) ? "container" : "reorder",
+      targetId: dropHost,
+      nodeId: isVirtualNodeId(node.id) ? hostIdFromVirtual(node.id) : node.id,
     },
     disabled: !interactive || drag.isDragging,
   });
@@ -921,9 +925,28 @@ function NodeShell({
       }}
       data-node-id={node.id}
       data-node-type={node.type}
-      {...(interactive && node.type !== "Scaffold" ? drag.listeners : {})}
-      {...(interactive && node.type !== "Scaffold" ? drag.attributes : {})}
-      onPointerDown={runAction ? onPointerDown : undefined}
+      {...(!dragLocked ? drag.attributes : {})}
+      {...(!dragLocked ? isolateDragListeners(drag.listeners) : {})}
+      onPointerDown={
+        runAction
+          ? onPointerDown
+          : (event) => {
+              event.stopPropagation();
+              if (interactive && onSelect && !isVirtualNodeId(node.id)) onSelect(node.id);
+              if (!dragLocked) {
+                (drag.listeners?.onPointerDown as ((e: ReactPointerEvent) => void) | undefined)?.(event);
+              }
+            }
+      }
+      onMouseDown={
+        runAction || dragLocked
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              if (interactive && onSelect && !isVirtualNodeId(node.id)) onSelect(node.id);
+              (drag.listeners?.onMouseDown as ((e: typeof event) => void) | undefined)?.(event);
+            }
+      }
       onPointerUp={
         runAction
           ? onPointerUp
@@ -946,7 +969,7 @@ function NodeShell({
       onClick={
         runAction
           ? undefined
-          : interactive && onSelect
+          : interactive && onSelect && !isVirtualNodeId(node.id)
             ? (event) => {
                 event.stopPropagation();
                 onSelect(node.id);
@@ -954,10 +977,10 @@ function NodeShell({
             : undefined
       }
       className={cn(
-        "relative min-w-0 max-w-full",
+        "relative min-w-0 max-w-full group/node",
         animationClass(node.animation),
         clipClass(node.modifiers.clip) || (isButtonType(node.type) ? "rounded-full" : ""),
-        interactive && node.type !== "Scaffold" && "cursor-grab",
+        interactive && !dragLocked && "cursor-grab",
         runAction && "cursor-pointer",
         selected && interactive && "m3-selected",
         drop.isOver && interactive && (isContainer(node.type) ? "m3-drop-over" : "m3-drop-sibling"),
@@ -979,13 +1002,16 @@ function NodeShell({
       }}
     >
       {children}
-      {selected && interactive && node.type !== "Scaffold" ? (
+      {interactive && !dragLocked ? (
         <span
           data-chrome="drag"
-          title="Drag to move this widget"
-          className="absolute -left-1 top-1 z-20 flex size-4 items-center justify-center rounded-sm bg-[#6750A4] text-white shadow"
+          title="Drag to move above or below another widget"
+          className={cn(
+            "absolute -left-1.5 top-1 z-20 flex size-5 items-center justify-center rounded-md bg-[#6750A4] text-white shadow-md",
+            selected ? "opacity-100" : "opacity-0 group-hover/node:opacity-100",
+          )}
         >
-          <GripVertical className="size-3" />
+          <GripVertical className="size-3.5" />
         </span>
       ) : null}
       {selected && interactive ? (
