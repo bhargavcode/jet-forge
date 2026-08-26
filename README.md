@@ -1,6 +1,6 @@
 # Compose Studio
 
-A visual **Material 3** designer for Jetpack Compose screens. You drag official-style components onto a phone canvas, bind them to REST APIs, add enter motion, and **publish**. An Android runtime then fetches that same JSON document, calls the same APIs, and renders real Compose Material 3 views.
+A visual **Material 3** designer for Jetpack Compose screens. You drag official-style components onto a phone canvas, bind them to REST APIs, add enter motion, and **publish**. A Kotlin Multiplatform runtime then fetches that same JSON document and renders it on Android and iOS next to your traditional screens.
 
 This repo ships a working slice of that loop: designer → document → server → device runtime (web simulator + Kotlin sources).
 
@@ -15,9 +15,9 @@ This repo ships a working slice of that loop: designer → document → server �
            │ same schema                                         │ GET document
            ▼                                                     ▼
 ┌──────────────────────┐                              ┌─────────────────────┐
-│  Web device runtime  │                              │  Android runtime    │
-│  /device/:id         │                              │  ScreenClient +     │
-│  (preview on phone)  │                              │  StudioScreen()     │
+│  Web device runtime  │                              │  KMP runtime         │
+│  /device/:id         │                              │  JetForgeScreen()    │
+│  (preview on phone)  │                              │  Android + iOS       │
 └──────────────────────┘                              └──────────┬──────────┘
                                                                  │
                                                       REST data sources
@@ -68,7 +68,24 @@ val screen = ScreenClient.fetchScreen(baseUrl, "us-briefing")
 StudioScreen(screen, data)
 ```
 
-Copy `android/composestudio-runtime` into an Android Studio project. Enable Compose Material 3 and kotlinx.serialization. Use `http://<lan-ip>:43145` on a physical device.
+Copy `kmp/jetforge` into an Android Studio / KMP project. Enable Compose Multiplatform and kotlinx.serialization. Use `http://<lan-ip>:43145` on a physical device.
+
+```kotlin
+JetForge.configure(JetForgeConfig(baseUrl = "http://10.0.2.2:43145"))
+
+// Traditional screen
+@Composable
+fun Home() { /* your UI */ }
+
+// Server-driven screen — pass the published endpoint
+@Composable
+fun Briefing() {
+    JetForgeScreen(endpoint = "us-briefing")
+}
+
+// Embed inside a screen you already own
+JetForgeComponent(endpoint = "us-briefing", modifier = Modifier.height(240.dp))
+```
 
 ## Document contract
 
@@ -121,5 +138,6 @@ Do not generate a new APK for every screen. Keep the interpreter in the app, and
 - `src/components/preview` — Material 3 phone renderer (shared with `/device`)
 - `src/lib/schema.ts` — the document types
 - `src/app/api/screens` — publish / fetch
-- `android/composestudio-runtime` — Kotlin interpreter
-- `android/sample` — Activity that loads a published screen
+- `kmp/jetforge` — Kotlin Multiplatform interpreter (`JetForgeScreen`, `JetForgeComponent`) for Android + iOS
+- `kmp/sample` — mixed app: traditional Home/Settings + live published Briefing
+- `android/composestudio-runtime` — earlier Android-only snapshot (prefer `kmp/`)
