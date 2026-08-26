@@ -70,7 +70,7 @@ interface DesignerState {
   addScreen: () => void;
   deleteCurrentScreen: () => string | null;
   patchCurrentScreen: (patch: Partial<ScreenDef>) => void;
-  addNode: (parentId: string, type: NodeType, slot?: SlotName) => string | null;
+  addNode: (parentId: string, type: NodeType, slot?: SlotName, index?: number) => string | null;
   patchNode: (id: string, patch: Partial<UiNode>) => void;
   relocateNode: (nodeId: string, parentId: string, index: number) => string | null;
   deleteSelected: () => string | null;
@@ -211,7 +211,7 @@ export const useDesigner = create<DesignerState>()(
           const { screen, currentScreenId } = get();
           set({ ...historyPatch(), screen: patchScreen(screen, currentScreenId, patch) });
         },
-        addNode: (parentId, type, slot) => {
+        addNode: (parentId, type, slot, index) => {
           const { screen, currentScreenId } = get();
           const root = currentRoot(screen, currentScreenId);
           const parent = findNode(root, parentId);
@@ -224,7 +224,7 @@ export const useDesigner = create<DesignerState>()(
             else if (type === "FAB") node.slot = "fab";
             else node.slot = "content";
           }
-          const nextRoot = insertChild(root, parentId, node);
+          const nextRoot = insertChild(root, parentId, node, index);
           set({
             ...historyPatch(),
             screen: withRoot(screen, currentScreenId, nextRoot),

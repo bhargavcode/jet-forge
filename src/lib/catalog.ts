@@ -129,16 +129,40 @@ export function createNode(type: NodeType): UiNode {
     case "TextButton":
       return {
         ...base,
-        props: { label: type === "FilledButton" ? "Confirm" : "Action" },
-        modifiers: {},
+        props: {
+          label: type === "FilledButton" ? "Confirm" : "Action",
+          textAlign: "center",
+          style: "labelLarge",
+          color: type === "FilledButton" ? "onPrimary" : "primary",
+          enabled: true,
+        },
+        modifiers: { clip: "full" },
       };
     case "Chip":
-      return { ...base, props: { label: "Filter" }, modifiers: {} };
+      return {
+        ...base,
+        props: {
+          label: "Filter",
+          textAlign: "center",
+          style: "labelLarge",
+          color: "onSurface",
+          enabled: true,
+        },
+        modifiers: { clip: "full" },
+      };
     case "TextField":
       return {
         ...base,
-        props: { label: "Search", placeholder: "Hint text", value: "" },
-        modifiers: { fillMaxWidth: true },
+        props: {
+          label: "Search",
+          placeholder: "Hint text",
+          value: "",
+          textAlign: "start",
+          style: "bodyLarge",
+          color: "onSurface",
+          enabled: true,
+        },
+        modifiers: { fillMaxWidth: true, clip: "extraSmall" },
       };
     case "Switch":
       return { ...base, props: { label: "Notifications", checked: true }, modifiers: { fillMaxWidth: true } };
@@ -194,10 +218,22 @@ export const BINDABLE_PROPS: Partial<Record<NodeType, { key: string; label: stri
     { key: "name", label: "Icon name" },
     { key: "color", label: "Tint" },
   ],
-  FilledButton: [{ key: "label", label: "Label" }],
-  OutlinedButton: [{ key: "label", label: "Label" }],
-  TextButton: [{ key: "label", label: "Label" }],
-  Chip: [{ key: "label", label: "Label" }],
+  FilledButton: [
+    { key: "label", label: "Label" },
+    { key: "color", label: "Text color" },
+  ],
+  OutlinedButton: [
+    { key: "label", label: "Label" },
+    { key: "color", label: "Text color" },
+  ],
+  TextButton: [
+    { key: "label", label: "Label" },
+    { key: "color", label: "Text color" },
+  ],
+  Chip: [
+    { key: "label", label: "Label" },
+    { key: "color", label: "Text color" },
+  ],
   TopAppBar: [{ key: "title", label: "Title" }],
   TextField: [
     { key: "value", label: "Value" },

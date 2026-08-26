@@ -33,15 +33,15 @@ The KMP interpreter lives in **its own repository**: [bhargavcode/jetforge-kmp](
 - Design Material 3 screens, including **multiple routes** (Headlines → Article → Search)
 - **Undo / Redo** (toolbar + Ctrl/Cmd+Z, Shift+Z / Y) for document edits
 - **Resizable panes** — drag the splitters between Components, Layers, canvas, Properties, and Request
-- **Drag widgets** on the canvas or in Layers to place them above or below another view; the layout wraps to available space
+- Widget **Compose modifiers**: size, padding, clip, alpha, offset, rotation, elevation, surface color / hex, border, weight
+- **Drawables**: solid color, gradient, or image background — these paint the **widget surface** (button, chip, field, card), not a hidden layer behind the default fill
+- **Text + container properties** on Button, Chip, and TextField: typography, text color (token or hex), alignment, weight, font size, max lines, plus enabled / leading icon
+- **Drag widgets** on the canvas or in Layers to place them above or below another view — grab the purple handle or the widget itself; a ghost follows the pointer
 - **Pinch / Ctrl+wheel zoom** on the phone canvas (plus zoom controls). On a larger screen the phone auto-fits so the composition stays consistent
 - **Remove widgets** (Delete / Backspace, Layers trash, Inspector) including every binding, list bind, and prototype wire on the subtree
 - **Clear binds** without deleting the node — also walks children
 - **Prototype board** — see every screen, drag artboards, and wire a view click (or swipe / long-press / double-tap) to another screen
 - **Touch events** on any node: tap, doubleTap, longPress, swipeLeft / swipeRight / swipeUp / swipeDown
-- Widget **Compose modifiers**: size, padding, clip, alpha, offset, rotation, elevation, surface color / hex, border, weight
-- **Drawables**: solid color, gradient, or image background
-- **Text styles**: typography role, color token, align, maxLines, overflow, weight
 - **Motion**: fade, slide in/out, bounce, bounceIn, colorPulse on surface, elevationPulse, cardSlide with move X/Y
 - Upload **image and icon placeholders** from this device; bind `item.image` (or any API path) so the live response replaces the placeholder
 - Configure the screen **request**: HTTP method, header key-value pairs, query, JSON body, form-urlencoded, or multipart. Values accept `{{forms.search.query}}` and `{{route.*}}`

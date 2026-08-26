@@ -22,6 +22,13 @@ import type {
 import type { VisibleIfOp } from "@/lib/schema";
 import { TOUCH_EVENTS } from "@/lib/schema";
 import { interactionsOf } from "@/lib/interactions";
+import {
+  defaultTextToken,
+  defaultTypeScale,
+  isButtonType,
+  isLabelType,
+  textAlignValue,
+} from "@/lib/widget-chrome";
 import { AssetUpload } from "./AssetUpload";
 import { ModelBrowser } from "./ModelBrowser";
 import { useDesigner } from "@/lib/store";
@@ -728,6 +735,192 @@ export function Inspector() {
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ColorInput({
+  value,
+  onChange,
+  placeholder = "#6750A4",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const hex = /^#[0-9a-f]{6}$/i.test(value) ? value : /^#[0-9a-f]{3}$/i.test(value) ? value : placeholder;
+  const normalized = hex.length === 4 ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}` : hex;
+  return (
+    <div className="flex gap-2">
+      <input
+        type="color"
+        aria-label="Pick color"
+        className="h-9 w-10 shrink-0 cursor-pointer rounded border bg-transparent p-1"
+        value={normalized}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <Input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function TextChromeFields({
+  node,
+  setProp,
+  contentKey = "label",
+  contentLabel = "Text",
+  showContent = true,
+}: {
+  node: UiNode;
+  setProp: (key: string, value: string | number | boolean) => void;
+  contentKey?: string;
+  contentLabel?: string;
+  showContent?: boolean;
+}) {
+  return (
+    <Section title="Text">
+      {showContent ? (
+        <Field label={contentLabel}>
+          <Input value={String(node.props[contentKey] ?? "")} onChange={(e) => setProp(contentKey, e.target.value)} />
+        </Field>
+      ) : null}
+      <Field label="Typography">
+        <Select
+          value={String(node.props.style ?? defaultTypeScale(node.type))}
+          onValueChange={(v) => v && setProp("style", v)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TEXT_STYLES.map((style) => (
+              <SelectItem key={style} value={style}>
+                {style}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Text color token">
+        <Select
+          value={String(node.props.color ?? defaultTextToken(node.type))}
+          onValueChange={(v) => v && setProp("color", v)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {COLORS.map((color) => (
+              <SelectItem key={color} value={color}>
+                {color}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Text color hex">
+        <ColorInput
+          value={String(node.props.colorHex ?? "")}
+          placeholder="#FFFFFF"
+          onChange={(value) => setProp("colorHex", value)}
+        />
+      </Field>
+      <Field label="Align">
+        <Select value={textAlignValue(node)} onValueChange={(v) => v && setProp("textAlign", v)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="start">start</SelectItem>
+            <SelectItem value="center">center</SelectItem>
+            <SelectItem value="end">end</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Weight">
+        <Select value={String(node.props.weight ?? "400")} onValueChange={(v) => v && setProp("weight", Number(v))}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="400">400</SelectItem>
+            <SelectItem value="500">500</SelectItem>
+            <SelectItem value="700">700</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Font size dp">
+        <Input
+          type="number"
+          placeholder="from role"
+          value={node.props.fontSizeDp == null ? "" : String(node.props.fontSizeDp)}
+          onChange={(e) => setProp("fontSizeDp", e.target.value === "" ? 0 : Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Max lines">
+        <Input
+          type="number"
+          value={Number(node.props.maxLines ?? 0)}
+          onChange={(e) => setProp("maxLines", Number(e.target.value))}
+        />
+      </Field>
+      <Field label="Overflow">
+        <Select value={String(node.props.overflow ?? "clip")} onValueChange={(v) => v && setProp("overflow", v)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="clip">clip</SelectItem>
+            <SelectItem value="ellipsis">ellipsis</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </Section>
+  );
+}
+
+function ButtonChromeFields({
+  node,
+  setProp,
+}: {
+  node: UiNode;
+  setProp: (key: string, value: string | number | boolean) => void;
+}) {
+  return (
+    <Section title={node.type === "Chip" ? "Chip" : "Button"}>
+      <Field label="Enabled">
+        <Switch checked={node.props.enabled !== false} onCheckedChange={(checked) => setProp("enabled", Boolean(checked))} />
+      </Field>
+      <Field label="Leading icon">
+        <Select
+          value={String(node.props.icon ?? "none")}
+          onValueChange={(v) => v && setProp("icon", v === "none" ? "" : v)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">none</SelectItem>
+            {ICONS.map((icon) => (
+              <SelectItem key={icon} value={icon}>
+                {icon}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Container fill, gradient, and image live in Drawable. Shape, size, elevation, and padding are Compose modifiers.
+      </p>
+    </Section>
+  );
+}
+
 function TypeFields({
   node,
   setProp,
@@ -736,100 +929,22 @@ function TypeFields({
   setProp: (key: string, value: string | number | boolean) => void;
 }) {
   if (node.type === "Text") {
-    return (
-      <>
-        <Field label="Text">
-          <Input value={String(node.props.text ?? "")} onChange={(e) => setProp("text", e.target.value)} />
-        </Field>
-        <Field label="Typography">
-          <Select value={String(node.props.style ?? "bodyLarge")} onValueChange={(v) => v && setProp("style", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TEXT_STYLES.map((style) => (
-                <SelectItem key={style} value={style}>
-                  {style}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Color token">
-          <Select value={String(node.props.color ?? "onSurface")} onValueChange={(v) => v && setProp("color", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {COLORS.map((color) => (
-                <SelectItem key={color} value={color}>
-                  {color}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Align">
-          <Select value={String(node.props.textAlign ?? "start")} onValueChange={(v) => v && setProp("textAlign", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="start">start</SelectItem>
-              <SelectItem value="center">center</SelectItem>
-              <SelectItem value="end">end</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Max lines">
-          <Input type="number" value={Number(node.props.maxLines ?? 0)} onChange={(e) => setProp("maxLines", Number(e.target.value))} />
-        </Field>
-        <Field label="Overflow">
-          <Select value={String(node.props.overflow ?? "clip")} onValueChange={(v) => v && setProp("overflow", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="clip">clip</SelectItem>
-              <SelectItem value="ellipsis">ellipsis</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Weight">
-          <Select value={String(node.props.weight ?? "400")} onValueChange={(v) => v && setProp("weight", Number(v))}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="400">400</SelectItem>
-              <SelectItem value="500">500</SelectItem>
-              <SelectItem value="700">700</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-      </>
-    );
+    return <TextChromeFields node={node} setProp={setProp} contentKey="text" contentLabel="Text" />;
   }
 
-  if (
-    node.type === "FilledButton" ||
-    node.type === "OutlinedButton" ||
-    node.type === "TextButton" ||
-    node.type === "Chip"
-  ) {
+  if (isButtonType(node.type)) {
     return (
-      <Field label="Label">
-        <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
-      </Field>
+      <>
+        <TextChromeFields node={node} setProp={setProp} contentKey="label" contentLabel="Label" />
+        <ButtonChromeFields node={node} setProp={setProp} />
+      </>
     );
   }
 
   if (node.type === "TopAppBar") {
     return (
       <>
-        <Field label="Title">
-          <Input value={String(node.props.title ?? "")} onChange={(e) => setProp("title", e.target.value)} />
-        </Field>
+        <TextChromeFields node={node} setProp={setProp} contentKey="title" contentLabel="Title" />
         <Field label="Navigation icon">
           <Select
             value={String(node.props.navigationIcon ?? "menu")}
@@ -854,15 +969,44 @@ function TypeFields({
   if (node.type === "TextField") {
     return (
       <>
-        <Field label="Label">
-          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
-        </Field>
-        <Field label="Placeholder">
-          <Input
-            value={String(node.props.placeholder ?? "")}
-            onChange={(e) => setProp("placeholder", e.target.value)}
-          />
-        </Field>
+        <Section title="Field">
+          <Field label="Label">
+            <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+          </Field>
+          <Field label="Placeholder">
+            <Input
+              value={String(node.props.placeholder ?? "")}
+              onChange={(e) => setProp("placeholder", e.target.value)}
+            />
+          </Field>
+          <Field label="Value">
+            <Input value={String(node.props.value ?? "")} onChange={(e) => setProp("value", e.target.value)} />
+          </Field>
+          <Field label="Enabled">
+            <Switch
+              checked={node.props.enabled !== false}
+              onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Label color token">
+            <Select
+              value={String(node.props.labelColor ?? "onSurfaceVariant")}
+              onValueChange={(v) => v && setProp("labelColor", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COLORS.map((color) => (
+                  <SelectItem key={color} value={color}>
+                    {color}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </Section>
+        <TextChromeFields node={node} setProp={setProp} showContent={false} />
       </>
     );
   }
@@ -870,9 +1014,7 @@ function TypeFields({
   if (node.type === "ListItem") {
     return (
       <>
-        <Field label="Headline">
-          <Input value={String(node.props.headline ?? "")} onChange={(e) => setProp("headline", e.target.value)} />
-        </Field>
+        <TextChromeFields node={node} setProp={setProp} contentKey="headline" contentLabel="Headline" />
         <Field label="Supporting">
           <Input
             value={String(node.props.supporting ?? "")}
@@ -932,9 +1074,7 @@ function TypeFields({
   if (node.type === "Switch" || node.type === "Checkbox") {
     return (
       <>
-        <Field label="Label">
-          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
-        </Field>
+        <TextChromeFields node={node} setProp={setProp} contentKey="label" contentLabel="Label" />
         <Field label="Checked">
           <Switch checked={Boolean(node.props.checked)} onCheckedChange={(checked) => setProp("checked", Boolean(checked))} />
         </Field>
@@ -984,6 +1124,10 @@ function TypeFields({
         </p>
       </>
     );
+  }
+
+  if (isLabelType(node.type)) {
+    return <TextChromeFields node={node} setProp={setProp} />;
   }
 
   return (
@@ -1241,12 +1385,10 @@ function ComposeLayout({
         </Select>
       </Field>
       <Field label="Surface hex">
-        <Input
+        <ColorInput
           value={m.backgroundHex ?? ""}
           placeholder="#EADDFF"
-          onChange={(e) =>
-            patchNode(node.id, { modifiers: { ...m, backgroundHex: e.target.value || undefined } })
-          }
+          onChange={(value) => patchNode(node.id, { modifiers: { ...m, backgroundHex: value || undefined } })}
         />
       </Field>
       <Field label="Border width / token">
@@ -1303,14 +1445,42 @@ function DrawableFields({
 }) {
   const drawable = node.drawable ?? { type: "none" as const };
   return (
-    <div className="space-y-3 rounded-lg border p-2">
+        <div className="space-y-3 rounded-lg border p-2">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Drawable</div>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Paints the widget surface. On Button, Chip, and TextField this replaces the default Material fill so the gradient is visible.
+      </p>
       <Field label="Background">
         <Select
           value={drawable.type}
-          onValueChange={(value) =>
-            value && patchNode(node.id, { drawable: { ...drawable, type: value as DrawableType } })
-          }
+          onValueChange={(value) => {
+            if (!value) return;
+            const type = value as DrawableType;
+            if (type === "gradient") {
+              patchNode(node.id, {
+                drawable: {
+                  ...drawable,
+                  type,
+                  startHex: drawable.startHex || "#6750A4",
+                  endHex: drawable.endHex || "#1B4B8A",
+                  angle: drawable.angle ?? 145,
+                },
+              });
+              return;
+            }
+            if (type === "color") {
+              patchNode(node.id, {
+                drawable: {
+                  ...drawable,
+                  type,
+                  colorToken: drawable.colorToken ?? "primary",
+                  colorHex: drawable.colorHex || "#6750A4",
+                },
+              });
+              return;
+            }
+            patchNode(node.id, { drawable: { ...drawable, type } });
+          }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -1349,10 +1519,10 @@ function DrawableFields({
             </Select>
           </Field>
           <Field label="Color hex">
-            <Input
+            <ColorInput
               value={drawable.colorHex ?? ""}
               placeholder="#EADDFF"
-              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, colorHex: e.target.value } })}
+              onChange={(value) => patchNode(node.id, { drawable: { ...drawable, colorHex: value } })}
             />
           </Field>
         </>
@@ -1360,15 +1530,15 @@ function DrawableFields({
       {drawable.type === "gradient" ? (
         <>
           <Field label="Start">
-            <Input
+            <ColorInput
               value={drawable.startHex ?? "#6750A4"}
-              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, startHex: e.target.value } })}
+              onChange={(value) => patchNode(node.id, { drawable: { ...drawable, startHex: value } })}
             />
           </Field>
           <Field label="End">
-            <Input
+            <ColorInput
               value={drawable.endHex ?? "#1B4B8A"}
-              onChange={(e) => patchNode(node.id, { drawable: { ...drawable, endHex: e.target.value } })}
+              onChange={(value) => patchNode(node.id, { drawable: { ...drawable, endHex: value } })}
             />
           </Field>
           <Field label="Angle">

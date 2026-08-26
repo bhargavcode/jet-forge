@@ -208,6 +208,22 @@
   background: color-mix(in srgb, var(--md-primary) 10%, transparent);
 }
 
+.m3-drop-sibling {
+  outline: 2px dashed var(--md-primary);
+  outline-offset: 3px;
+}
+
+.m3-drop-sibling::after {
+  position: absolute;
+  right: 8px;
+  bottom: -5px;
+  left: 8px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--md-primary);
+  content: "";
+}
+
 .m3-elev-1 {
   box-shadow:
     0 1px 2px rgb(0 0 0 / 18%),

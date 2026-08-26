@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Bell,
+  GripVertical,
   Heart,
   Home,
   LoaderCircle,
@@ -33,6 +34,16 @@ import type {
   UiNode,
 } from "@/lib/schema";
 import { useDesigner } from "@/lib/store";
+import { isContainer } from "@/lib/tree";
+import {
+  contentJustify,
+  cssTextAlign,
+  defaultTextToken,
+  defaultTypeScale,
+  hasCustomSurface,
+  isButtonType,
+  isSurfaceType,
+} from "@/lib/widget-chrome";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<IconName, typeof Home> = {
@@ -214,10 +225,43 @@ function RippleButton({
   style?: CSSProperties;
 }) {
   return (
-    <button type="button" className={cn("m3-ripple relative overflow-hidden", className)} style={style}>
+    <div role="button" className={cn("m3-ripple relative overflow-hidden", className)} style={style}>
       {children}
-    </button>
+    </div>
   );
+}
+
+function resolveTextColor(node: UiNode, fallback?: ColorToken) {
+  if (typeof node.props.colorHex === "string" && node.props.colorHex) return String(node.props.colorHex);
+  const token = (node.props.color as ColorToken) || fallback || defaultTextToken(node.type);
+  return COLOR_VAR[token] ?? COLOR_VAR.onSurface;
+}
+
+function typeScaleClass(node: UiNode) {
+  const style = (node.props.style as TextStyle) || defaultTypeScale(node.type);
+  return TYPE_SCALE[style] ?? TYPE_SCALE.bodyLarge;
+}
+
+function maxLinesStyle(node: UiNode): CSSProperties {
+  const maxLines = Number(node.props.maxLines ?? 0);
+  return {
+    fontWeight: Number(node.props.weight) || undefined,
+    fontSize: node.props.fontSizeDp ? `${Number(node.props.fontSizeDp)}px` : undefined,
+    display: maxLines ? "-webkit-box" : undefined,
+    WebkitLineClamp: maxLines || undefined,
+    WebkitBoxOrient: maxLines ? "vertical" : undefined,
+    overflow: maxLines || node.props.overflow === "ellipsis" ? "hidden" : undefined,
+    textOverflow: node.props.overflow === "ellipsis" || maxLines ? "ellipsis" : undefined,
+  };
+}
+
+function paintedSurface(node: UiNode): CSSProperties {
+  if (!hasCustomSurface(node)) return {};
+  const drawable = drawableStyle(node);
+  return {
+    ...drawable,
+    background: drawable.background || node.modifiers.backgroundHex || (node.modifiers.backgroundToken ? COLOR_VAR[node.modifiers.backgroundToken] : undefined),
+  };
 }
 
 interface NodeProps {
@@ -448,7 +492,12 @@ export function ComposeNode({
         <span className="flex size-12 items-center justify-center text-[var(--md-on-surface)]">
           <MaterialIcon name={nav} />
         </span>
-        <div className="min-w-0 flex-1 text-[22px] leading-7 text-[var(--md-on-surface)]">{title}</div>
+        <div
+          className="min-w-0 flex-1 text-[22px] leading-7 text-[var(--md-on-surface)]"
+          style={{ color: resolveTextColor(node, "onSurface"), textAlign: cssTextAlign(node), ...maxLinesStyle(node) }}
+        >
+          {title}
+        </div>
         <span className="flex size-12 items-center justify-center text-[var(--md-on-surface-variant)]">
           <MaterialIcon name="notifications" />
         </span>
@@ -510,28 +559,61 @@ export function ComposeNode({
     const label = String(resolveProp(node, "label", scope) ?? "Action");
     const filled = node.type === "FilledButton";
     const outlined = node.type === "OutlinedButton";
+    const custom = hasCustomSurface(node);
+    const icon = node.props.icon ? String(node.props.icon) : "";
+    const enabled = node.props.enabled !== false;
     return wrap(
       <RippleButton
         className={cn(
-          "h-10 min-w-[48px] rounded-full px-6 text-[14px] font-medium tracking-[0.1px]",
-          filled && "bg-[var(--md-primary)] text-[var(--md-on-primary)]",
-          outlined && "border border-[var(--md-outline)] text-[var(--md-primary)] bg-transparent",
-          node.type === "TextButton" && "text-[var(--md-primary)] px-3",
+          "flex min-h-10 min-w-[48px] items-center gap-2 rounded-full px-6",
+          typeScaleClass(node),
+          !custom && filled && "bg-[var(--md-primary)] text-[var(--md-on-primary)]",
+          !custom && outlined && "border border-[var(--md-outline)] bg-transparent text-[var(--md-primary)]",
+          !custom && node.type === "TextButton" && "px-3 text-[var(--md-primary)]",
+          !enabled && "opacity-[0.38]",
         )}
+        style={{
+          width: "100%",
+          justifyContent: contentJustify(node),
+          color: resolveTextColor(node, filled ? "onPrimary" : "primary"),
+          ...paintedSurface(node),
+        }}
       >
-        {label}
+        {icon && icon !== "none" ? <MaterialIcon name={icon} size={18} color="currentColor" /> : null}
+        <span className="min-w-0" style={{ textAlign: cssTextAlign(node), ...maxLinesStyle(node) }}>
+          {label}
+        </span>
       </RippleButton>,
-      "w-auto inline-flex",
+      cn(node.modifiers.fillMaxWidth ? "w-full" : "w-auto inline-flex", node.modifiers.clip ? "" : "rounded-full"),
     );
   }
 
   if (node.type === "Chip") {
     const label = String(resolveProp(node, "label", scope) ?? "Chip");
+    const custom = hasCustomSurface(node);
+    const icon = node.props.icon ? String(node.props.icon) : "";
+    const enabled = node.props.enabled !== false;
     return wrap(
-      <div className="inline-flex h-8 items-center rounded-lg border border-[var(--md-outline-variant)] px-4 text-[14px] text-[var(--md-on-surface)]">
-        {label}
+      <div
+        className={cn(
+          "inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-4",
+          typeScaleClass(node),
+          !custom && "border border-[var(--md-outline-variant)] text-[var(--md-on-surface)]",
+          !enabled && "opacity-[0.38]",
+        )}
+        style={{
+          width: "100%",
+          justifyContent: contentJustify(node),
+          color: resolveTextColor(node, "onSurface"),
+          ...paintedSurface(node),
+        }}
+      >
+        {icon && icon !== "none" ? <MaterialIcon name={icon} size={16} color="currentColor" /> : null}
+        <span className="min-w-0" style={{ textAlign: cssTextAlign(node), ...maxLinesStyle(node) }}>
+          {label}
+        </span>
       </div>,
-      "w-auto inline-flex",
+      cn(node.modifiers.fillMaxWidth ? "w-full" : "w-auto inline-flex", node.modifiers.clip ? "" : "rounded-lg"),
     );
   }
 
@@ -544,23 +626,52 @@ export function ComposeNode({
       formId && fieldName ? runtime?.formValues[formId]?.[fieldName] : undefined;
     const value = formValue ?? String(resolveProp(node, "value", scope) ?? "");
     const invalid = Boolean(formId && fieldName && runtime?.formErrors[formId]?.[fieldName]);
+    const custom = hasCustomSurface(node);
+    const enabled = node.props.enabled !== false;
+    const fieldStyle: CSSProperties = {
+      color: resolveTextColor(node, "onSurface"),
+      textAlign: cssTextAlign(node),
+      ...maxLinesStyle(node),
+      ...paintedSurface(node),
+      borderColor: invalid ? "var(--md-error)" : "var(--md-primary)",
+    };
     return wrap(
-      <label className="block" onClick={(event) => event.stopPropagation()}>
-        <span className="mb-1 block text-[12px] font-medium tracking-[0.5px] text-[var(--md-on-surface-variant)]">
+      <label
+        className={cn("block", !enabled && "opacity-[0.38]")}
+        onClick={runtime?.enabled ? (event) => event.stopPropagation() : undefined}
+      >
+        <span
+          className="mb-1 block text-[12px] font-medium tracking-[0.5px] text-[var(--md-on-surface-variant)]"
+          style={{
+            color:
+              typeof node.props.labelColorHex === "string" && node.props.labelColorHex
+                ? String(node.props.labelColorHex)
+                : resolveTextColor({ ...node, props: { ...node.props, color: node.props.labelColor ?? "onSurfaceVariant" } }, "onSurfaceVariant"),
+          }}
+        >
           {label}
         </span>
         {runtime?.enabled && formId && fieldName ? (
           <input
             value={value}
             placeholder={placeholder}
+            disabled={!enabled}
             onChange={(event) => runtime.setFormValue(formId, fieldName, event.target.value)}
-            className="h-14 w-full rounded-t-md border-b-2 bg-[var(--md-surface-container-high)] px-4 text-[16px] text-[var(--md-on-surface)] outline-none"
-            style={{ borderColor: invalid ? "var(--md-error)" : "var(--md-primary)" }}
+            className={cn(
+              "h-14 w-full rounded-t-md border-b-2 px-4 outline-none",
+              typeScaleClass(node),
+              !custom && "bg-[var(--md-surface-container-high)]",
+            )}
+            style={fieldStyle}
           />
         ) : (
           <div
-            className="flex h-14 items-center rounded-t-md border-b-2 bg-[var(--md-surface-container-high)] px-4 text-[16px] text-[var(--md-on-surface)]"
-            style={{ borderColor: invalid ? "var(--md-error)" : "var(--md-primary)" }}
+            className={cn(
+              "flex h-14 items-center rounded-t-md border-b-2 px-4",
+              typeScaleClass(node),
+              !custom && "bg-[var(--md-surface-container-high)]",
+            )}
+            style={{ ...fieldStyle, justifyContent: contentJustify(node) }}
           >
             {value || <span className="text-[var(--md-on-surface-variant)]">{placeholder}</span>}
           </div>
@@ -574,7 +685,12 @@ export function ComposeNode({
     const checked = Boolean(node.props.checked);
     return wrap(
       <div className="flex items-center justify-between gap-3 py-1">
-        <span className="text-[16px] text-[var(--md-on-surface)]">{label}</span>
+        <span
+          className={cn(typeScaleClass(node), "text-[var(--md-on-surface)]")}
+          style={{ color: resolveTextColor(node, "onSurface"), textAlign: cssTextAlign(node), ...maxLinesStyle(node) }}
+        >
+          {label}
+        </span>
         {node.type === "Switch" ? (
           <span
             className={cn(
@@ -609,23 +725,13 @@ export function ComposeNode({
 
   if (node.type === "Text") {
     const text = String(resolveProp(node, "text", scope) ?? "");
-    const style = (node.props.style as TextStyle) || "bodyLarge";
-    const color = (node.props.color as ColorToken) || "onSurface";
-    const align = String(node.props.textAlign ?? "start") as "start" | "center" | "end";
-    const maxLines = Number(node.props.maxLines ?? 0);
-    const weight = Number(node.props.weight ?? 0);
     return wrap(
       <div
-        className={TYPE_SCALE[style]}
+        className={typeScaleClass(node)}
         style={{
-          color: COLOR_VAR[color],
-          textAlign: align === "center" ? "center" : align === "end" ? "right" : "left",
-          fontWeight: weight || undefined,
-          display: maxLines ? "-webkit-box" : undefined,
-          WebkitLineClamp: maxLines || undefined,
-          WebkitBoxOrient: maxLines ? "vertical" : undefined,
-          overflow: maxLines || node.props.overflow === "ellipsis" ? "hidden" : undefined,
-          textOverflow: node.props.overflow === "ellipsis" || maxLines ? "ellipsis" : undefined,
+          color: resolveTextColor(node, "onSurface"),
+          textAlign: cssTextAlign(node),
+          ...maxLinesStyle(node),
         }}
       >
         {text}
@@ -751,8 +857,12 @@ function NodeShell({
   });
   const drop = useDroppable({
     id: `node-${node.id}`,
-    data: { kind: "reorder", targetId: node.id, nodeId: node.id },
-    disabled: !interactive,
+    data: {
+      kind: isContainer(node.type) ? "container" : "reorder",
+      targetId: node.id,
+      nodeId: node.id,
+    },
+    disabled: !interactive || drag.isDragging,
   });
   const startWire = useDesigner((s) => s.startWire);
   const completeWire = useDesigner((s) => s.completeWire);
@@ -846,26 +956,42 @@ function NodeShell({
       className={cn(
         "relative min-w-0 max-w-full",
         animationClass(node.animation),
-        clipClass(node.modifiers.clip),
-        interactive && "cursor-pointer",
+        clipClass(node.modifiers.clip) || (isButtonType(node.type) ? "rounded-full" : ""),
+        interactive && node.type !== "Scaffold" && "cursor-grab",
         runAction && "cursor-pointer",
         selected && interactive && "m3-selected",
-        drop.isOver && interactive && "m3-drop-over",
+        drop.isOver && interactive && (isContainer(node.type) ? "m3-drop-over" : "m3-drop-sibling"),
         drag.isDragging && "opacity-40",
+        interactive && !runAction && !isContainer(node.type) && "[&>:not([data-chrome])]:pointer-events-none",
         extraClass,
       )}
       style={{
-        ...modifierStyle(node.modifiers),
-        ...drawableStyle(node),
+        ...(() => {
+          const layout = modifierStyle(node.modifiers);
+          if (isSurfaceType(node.type)) layout.background = undefined;
+          return layout;
+        })(),
+        ...(isSurfaceType(node.type) ? {} : drawableStyle(node)),
         ...animationStyle(node.animation, itemIndex),
         ...extraStyle,
-        touchAction: runAction ? "none" : undefined,
+        touchAction: interactive || runAction ? "none" : undefined,
+        userSelect: interactive ? "none" : undefined,
       }}
     >
       {children}
+      {selected && interactive && node.type !== "Scaffold" ? (
+        <span
+          data-chrome="drag"
+          title="Drag to move this widget"
+          className="absolute -left-1 top-1 z-20 flex size-4 items-center justify-center rounded-sm bg-[#6750A4] text-white shadow"
+        >
+          <GripVertical className="size-3" />
+        </span>
+      ) : null}
       {selected && interactive ? (
         <button
           type="button"
+          data-chrome="wire"
           data-wire-handle="1"
           title="Drag to another view or screen to wire"
           className="absolute -right-1 top-1 z-20 size-3 rounded-full bg-[#6750A4] ring-2 ring-white"
@@ -928,7 +1054,7 @@ function ActiveDropTarget({
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id,
-    data: { targetId: id },
+    data: { targetId: id, kind: String(id).includes("::") ? "slot" : "container" },
   });
   return (
     <div ref={setNodeRef} className={cn(className, isOver && "m3-drop-over")}>

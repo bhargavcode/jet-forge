@@ -4,10 +4,13 @@ import { useState, useSyncExternalStore } from "react";
 import {
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
+  closestCorners,
+  pointerWithin,
   useSensor,
   useSensors,
-  pointerWithin,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -32,6 +35,42 @@ import { acceptsChild, findNode, findParent, isContainer } from "@/lib/tree";
 import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
 
+const collisionDetection: CollisionDetection = (args) => {
+  const activeNodeId = args.active.data.current?.nodeId as string | undefined;
+  const droppableData = (collision: { id: string | number; data?: { droppableContainer?: { data?: { current?: { nodeId?: string; kind?: string } } } } }) =>
+    collision.data?.droppableContainer?.data?.current;
+
+  const withoutSelf = (collisions: ReturnType<typeof pointerWithin>) =>
+    collisions.filter((collision) => {
+      const id = String(collision.id);
+      if (id.startsWith("palette-") || id.startsWith("canvas-")) return false;
+      const data = droppableData(collision);
+      if (activeNodeId && (data?.nodeId === activeNodeId || id === `node-${activeNodeId}` || id === `layer-drop-${activeNodeId}`)) {
+        return false;
+      }
+      return true;
+    });
+
+  const preferSibling = (collisions: ReturnType<typeof pointerWithin>) => {
+    const reorder = collisions.filter((collision) => droppableData(collision)?.kind === "reorder");
+    return reorder.length ? reorder : collisions;
+  };
+
+  const pointer = preferSibling(withoutSelf(pointerWithin(args)));
+  if (pointer.length) return pointer;
+  return preferSibling(withoutSelf(closestCorners(args)));
+};
+
+function dropAfter(event: DragEndEvent) {
+  const over = event.over;
+  if (!over) return false;
+  const start = event.activatorEvent as PointerEvent | undefined;
+  const x = (start?.clientX ?? 0) + event.delta.x;
+  const y = (start?.clientY ?? 0) + event.delta.y;
+  const horizontal = over.rect.width > over.rect.height * 1.6;
+  return horizontal ? x > over.rect.left + over.rect.width / 2 : y > over.rect.top + over.rect.height / 2;
+}
+
 export function Designer() {
   const screen = useDesigner((s) => s.screen);
   const currentScreenId = useDesigner((s) => s.currentScreenId);
@@ -47,7 +86,7 @@ export function Designer() {
   const workspaceMode = useDesigner((s) => s.workspaceMode);
   const layout = useDesigner((s) => s.layout);
   const setLayout = useDesigner((s) => s.setLayout);
-  const [activeType, setActiveType] = useState<NodeType | null>(null);
+  const [activeDrag, setActiveDrag] = useState<{ type: NodeType; label: string } | null>(null);
   const [mobileTab, setMobileTab] = useState("canvas");
   const hydrated = useSyncExternalStore(
     (onChange) => useDesigner.persist.onFinishHydration(onChange),
@@ -57,7 +96,7 @@ export function Designer() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 6 },
+      activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 4 },
     }),
   );
 
@@ -65,18 +104,28 @@ export function Designer() {
 
   function onDragStart(event: DragStartEvent) {
     const type = event.active.data.current?.type as NodeType | undefined;
-    setActiveType(type ?? null);
+    const nodeId = event.active.data.current?.nodeId as string | undefined;
+    const moving = nodeId ? findNode(root, nodeId) : null;
+    const label =
+      moving && typeof moving.props.label === "string"
+        ? moving.props.label
+        : moving && typeof moving.props.text === "string"
+          ? moving.props.text
+          : type
+            ? (CATALOG.find((item) => item.type === type)?.label ?? type)
+            : "";
+    setActiveDrag(type ? { type, label: String(label) } : null);
   }
 
   function onDragEnd(event: DragEndEvent) {
-    setActiveType(null);
+    setActiveDrag(null);
     const data = event.active.data.current as
       | { source?: string; type?: NodeType; nodeId?: string }
       | undefined;
     const over = event.over;
     if (!over) return;
     const targetId = String(over.data.current?.targetId ?? over.id ?? "");
-    if (!targetId || targetId.startsWith("palette-") || String(over.id).startsWith("layer-") && !over.data.current) return;
+    if (!targetId || targetId.startsWith("palette-") || (String(over.id).startsWith("layer-") && !over.data.current)) return;
 
     let parentId = targetId;
     let slot: SlotName | undefined;
@@ -86,16 +135,16 @@ export function Designer() {
       slot = slotName;
     }
 
+    const kind = over.data.current?.kind as string | undefined;
+    const after = dropAfter(event);
+
     if (data?.source === "canvas" && data.nodeId) {
-      if (data.nodeId === parentId) return;
-      const kind = over?.data.current?.kind;
+      if (data.nodeId === parentId && kind !== "reorder") return;
       if (kind === "reorder") {
         const target = findNode(root, parentId);
         const parent = target ? findParent(root, parentId) : null;
         if (!target || !parent?.children) return;
         const index = parent.children.findIndex((child) => child.id === parentId);
-        const translated = event.active.rect.current.translated;
-        const after = translated ? translated.top + translated.height / 2 > over.rect.top + over.rect.height / 2 : false;
         const message = relocate(data.nodeId, parent.id, Math.max(0, index + (after ? 1 : 0)));
         if (message) toast.message(message);
         return;
@@ -113,7 +162,6 @@ export function Designer() {
 
     const type = data?.type;
     if (!type) return;
-    const kind = over.data.current?.kind;
     if (kind === "reorder") {
       const target = findNode(root, parentId);
       const parent = target ? findParent(root, parentId) : null;
@@ -122,7 +170,8 @@ export function Designer() {
         toast.error(`${type} cannot be dropped on ${parent.type}`);
         return;
       }
-      addNode(parent.id, type, slot);
+      const index = parent.children?.findIndex((child) => child.id === parentId) ?? 0;
+      addNode(parent.id, type, slot, Math.max(0, index + (after ? 1 : 0)));
       return;
     }
     const parent = findNode(root, parentId);
@@ -156,14 +205,18 @@ export function Designer() {
     );
   }
 
-  const catalogLabel = CATALOG.find((item) => item.type === activeType)?.label;
+  const catalogLabel = activeDrag
+    ? (CATALOG.find((item) => item.type === activeDrag.type)?.label ?? activeDrag.type)
+    : null;
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={pointerWithin}
+      collisionDetection={collisionDetection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onDragCancel={() => setActiveDrag(null)}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <HistoryHotkeys />
@@ -279,10 +332,11 @@ export function Designer() {
           </aside>
         </div>
       </div>
-      <DragOverlay>
-        {activeType ? (
-          <div className="rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-lg">
-            {catalogLabel}
+      <DragOverlay dropAnimation={null}>
+        {activeDrag ? (
+          <div className="max-w-56 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-lg">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{catalogLabel}</div>
+            <div className="truncate">{activeDrag.label || catalogLabel}</div>
           </div>
         ) : null}
       </DragOverlay>

@@ -121,12 +121,16 @@ export function bindableComposeProps(type: NodeType): { key: string; label: stri
         { key: "value", label: "value", compose: "TextField value" },
         { key: "label", label: "label", compose: "TextField label" },
         { key: "placeholder", label: "placeholder", compose: "placeholder" },
+        { key: "color", label: "text color", compose: "TextField colors" },
       ];
     case "FilledButton":
     case "OutlinedButton":
     case "TextButton":
     case "Chip":
-      return [{ key: "label", label: "label", compose: "Button text" }];
+      return [
+        { key: "label", label: "label", compose: "Button text" },
+        { key: "color", label: "content color", compose: "Button contentColor" },
+      ];
     case "Switch":
     case "Checkbox":
       return [{ key: "label", label: "label", compose: "label" }];
