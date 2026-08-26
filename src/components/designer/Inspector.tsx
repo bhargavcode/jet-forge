@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { BINDABLE_PROPS } from "@/lib/catalog";
 import { flattenSources } from "@/lib/bindings";
 import { bindableComposeProps } from "@/lib/model";
+import { bindPathsForModel } from "@/lib/kotlin-model";
 import type {
   ActionType,
   AnimationEasing,
@@ -18,6 +19,7 @@ import type {
   UiNode,
   VisibleWhen,
 } from "@/lib/schema";
+import type { VisibleIfOp } from "@/lib/schema";
 import { TOUCH_EVENTS } from "@/lib/schema";
 import { interactionsOf } from "@/lib/interactions";
 import { AssetUpload } from "./AssetUpload";
@@ -101,7 +103,8 @@ const EASINGS: AnimationEasing[] = ["standard", "emphasized", "bounce", "linear"
 const REPEATS: AnimationRepeat[] = ["none", "infinite"];
 const DRAWABLES: DrawableType[] = ["none", "color", "gradient", "image"];
 const VISIBILITY: VisibleWhen[] = ["always", "ready", "loading", "error", "empty", "invalid"];
-const ACTIONS: ActionType[] = ["none", "navigate", "back", "submitForm", "retry", "openUrl", "callApi"];
+const VISIBLE_IF_OPS: VisibleIfOp[] = ["truthy", "falsy", "equals", "notEquals", "empty", "notEmpty"];
+const ACTIONS: ActionType[] = ["none", "navigate", "focusNode", "back", "submitForm", "retry", "openUrl", "callApi"];
 
 function sliderNumber(value: number | readonly number[]) {
   return Array.isArray(value) ? Number(value[0]) : Number(value);
@@ -123,6 +126,7 @@ export function Inspector() {
   const patchNode = useDesigner((s) => s.patchNode);
   const deleteSelected = useDesigner((s) => s.deleteSelected);
   const clearSelectedWiring = useDesigner((s) => s.clearSelectedWiring);
+  const setActiveModelId = useDesigner((s) => s.setActiveModelId);
   const previewData = useDesigner((s) => s.previewData);
   const root = currentRoot(screen, currentScreenId);
   const node = selectedId ? findNode(root, selectedId) : null;
@@ -152,8 +156,8 @@ export function Inspector() {
   }));
 
   return (
-    <Tabs defaultValue="props" className="flex h-full flex-col">
-      <div className="border-b px-3 pt-3">
+    <Tabs defaultValue="props" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden">
+      <div className="shrink-0 border-b px-3 pt-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="truncate text-sm font-semibold">{node.type}</div>
           <Badge variant="secondary" className="font-mono text-[10px]">
@@ -197,8 +201,8 @@ export function Inspector() {
           </TabsTrigger>
         </TabsList>
       </div>
-      <ScrollArea className="flex-1">
-        <TabsContent value="props" className="space-y-4 p-3">
+      <ScrollArea className="min-h-0 flex-1">
+        <TabsContent value="props" className="mt-0 space-y-4 p-3">
           <TypeFields node={node} setProp={setProp} />
           <ComposeLayout node={node} patchNode={patchNode} />
           <DrawableFields node={node} patchNode={patchNode} />
@@ -247,8 +251,58 @@ export function Inspector() {
               </SelectContent>
             </Select>
           </Field>
+          <Field label="Visible if API path">
+            <Input
+              list="binding-paths"
+              placeholder="news.status or item.title"
+              value={node.visibleIf?.path ?? ""}
+              onChange={(e) =>
+                patchNode(node.id, {
+                  visibleIf: e.target.value
+                    ? { path: e.target.value, op: node.visibleIf?.op ?? "truthy", value: node.visibleIf?.value }
+                    : undefined,
+                })
+              }
+            />
+          </Field>
+          {node.visibleIf?.path ? (
+            <>
+              <Field label="Compare">
+                <Select
+                  value={node.visibleIf.op ?? "truthy"}
+                  onValueChange={(value) =>
+                    value &&
+                    patchNode(node.id, {
+                      visibleIf: { ...node.visibleIf!, op: value as VisibleIfOp },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBLE_IF_OPS.map((op) => (
+                      <SelectItem key={op} value={op}>
+                        {op}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              {node.visibleIf.op === "equals" || node.visibleIf.op === "notEquals" ? (
+                <Field label="Equals value">
+                  <Input
+                    value={node.visibleIf.value ?? ""}
+                    onChange={(e) =>
+                      patchNode(node.id, { visibleIf: { ...node.visibleIf!, value: e.target.value } })
+                    }
+                  />
+                </Field>
+              ) : null}
+            </>
+          ) : null}
         </TabsContent>
-        <TabsContent value="action" className="space-y-4 p-3">
+        <TabsContent value="action" className="mt-0 space-y-4 p-3">
           <p className="text-xs leading-5 text-muted-foreground">
             Wire gestures to screens the way Figma prototypes do. Tap, double-tap, long-press, and swipes publish into the native runtime.
           </p>
@@ -347,7 +401,27 @@ export function Inspector() {
             </>
           ) : null}
         </TabsContent>
-        <TabsContent value="bind" className="space-y-4 p-3">
+        <TabsContent value="bind" className="mt-0 space-y-4 p-3">
+          {(screen.dataModels ?? []).length ? (
+            <Field label="Kotlin data model">
+              <Select
+                value={screen.activeModelId ?? "none"}
+                onValueChange={(value) => setActiveModelId(value === "none" ? null : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select data class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Response JSON</SelectItem>
+                  {(screen.dataModels ?? []).map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
           {bindable.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               This component has no bindable properties. Use a list binding on LazyColumn to repeat children over an API array.
@@ -372,6 +446,13 @@ export function Inspector() {
             nodeType={node.type}
             bindings={node.bindings}
             itemBinding={node.itemBinding}
+            modelFieldsExtra={
+              (screen.dataModels ?? []).find((item) => item.id === screen.activeModelId)
+                ? bindPathsForModel(
+                    (screen.dataModels ?? []).find((item) => item.id === screen.activeModelId)!,
+                  )
+                : []
+            }
             onPick={(path, key) => {
               if (key === "itemBinding") {
                 patchNode(node.id, { itemBinding: path });
@@ -395,7 +476,7 @@ export function Inspector() {
             Click a field from the live/mock JSON to bind it. Compose properties sit next to network paths so you can map <code>Text(text)</code> to <code>item.title</code> without guessing.
           </p>
         </TabsContent>
-        <TabsContent value="motion" className="space-y-4 p-3">
+        <TabsContent value="motion" className="mt-0 space-y-4 p-3">
           <Field label="Enter animation">
             <Select
               value={node.animation?.type ?? "none"}
@@ -964,6 +1045,14 @@ function InteractionEditor({
           ×
         </Button>
       </div>
+      {action.type === "focusNode" ? (
+        <Input
+          className="h-8"
+          placeholder="Target view id"
+          value={action.nodeId ?? ""}
+          onChange={(e) => onChange({ ...item, action: { ...action, nodeId: e.target.value } })}
+        />
+      ) : null}
       {action.type === "navigate" || action.type === "submitForm" ? (
         <Select
           value={action.screenId ?? ""}
@@ -980,6 +1069,14 @@ function InteractionEditor({
             ))}
           </SelectContent>
         </Select>
+      ) : null}
+      {action.type === "navigate" ? (
+        <Input
+          className="h-8"
+          placeholder="Focus view id (optional)"
+          value={action.nodeId ?? ""}
+          onChange={(e) => onChange({ ...item, action: { ...action, nodeId: e.target.value } })}
+        />
       ) : null}
       {action.type === "navigate" ? (
         <Input

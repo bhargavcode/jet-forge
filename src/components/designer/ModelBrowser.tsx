@@ -10,17 +10,19 @@ export function ModelBrowser({
   nodeType,
   bindings,
   itemBinding,
+  modelFieldsExtra = [],
   onPick,
 }: {
   data: Record<string, unknown>;
   nodeType: NodeType;
   bindings?: Record<string, string>;
   itemBinding?: string;
+  modelFieldsExtra?: ModelField[];
   onPick: (path: string, composeKey: string) => void;
 }) {
   const compose = bindableComposeProps(nodeType);
   const [picked, setPicked] = useState<string | null>(null);
-  const fields = modelFields(data);
+  const fields = [...modelFieldsExtra, ...modelFields(data).filter((field) => !modelFieldsExtra.some((item) => item.path === field.path))];
   const suggested = suggestFields(nodeType, fields);
   const selectedKey = compose.some((item) => item.key === picked) ? (picked as string) : (compose[0]?.key ?? "text");
   const selected = compose.find((item) => item.key === selectedKey) ?? compose[0];
@@ -37,7 +39,7 @@ export function ModelBrowser({
           Jetpack Compose properties
         </div>
         <p className="mb-2 text-[11px] leading-4 text-muted-foreground">
-          Select a Compose target, then click a network field to bind it.
+          Select a Compose target, then click a Kotlin or network field to bind it.
         </p>
         <div className="flex flex-col gap-1">
           {compose.map((item) => {

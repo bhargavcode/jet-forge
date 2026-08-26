@@ -64,6 +64,8 @@ export function normalizeDocument(doc: ScreenDocument): ScreenDocument {
       root: nextStart.root,
       startScreenId: nextStart.id,
       assets: doc.assets ?? [],
+      dataModels: doc.dataModels ?? [],
+      activeModelId: doc.activeModelId,
     };
   }
   const legacyRoot = normalizeNode(doc.root);

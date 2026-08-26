@@ -1,3 +1,4 @@
+import { SAMPLE_ARTICLE_KOTLIN, SAMPLE_NEWS_KOTLIN, parseKotlinDataClass } from "./kotlin-model";
 import { normalizeDocument } from "./document";
 import type { ClickAction, ScreenDocument, UiNode } from "./schema";
 
@@ -460,5 +461,23 @@ export function createStarterScreen(): ScreenDocument {
       },
     ],
     root: headlinesRoot,
+    dataModels: [
+      {
+        id: "model_article",
+        name: "Article",
+        kotlin: SAMPLE_ARTICLE_KOTLIN,
+        fields: parseKotlinDataClass(SAMPLE_ARTICLE_KOTLIN)?.fields ?? [],
+        sourceId: "news",
+        listPath: "news.articles",
+      },
+      {
+        id: "model_news",
+        name: "NewsResponse",
+        kotlin: SAMPLE_NEWS_KOTLIN,
+        fields: parseKotlinDataClass(SAMPLE_NEWS_KOTLIN)?.fields ?? [],
+        sourceId: "news",
+      },
+    ],
+    activeModelId: "model_article",
   });
 }

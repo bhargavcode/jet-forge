@@ -32,6 +32,9 @@ The KMP interpreter lives in **its own repository**: [bhargavcode/jetforge-kmp](
 
 - Design Material 3 screens, including **multiple routes** (Headlines → Article → Search)
 - **Undo / Redo** (toolbar + Ctrl/Cmd+Z, Shift+Z / Y) for document edits
+- **Resizable panes** — drag the splitters between Components, Layers, canvas, Properties, and Request
+- **Drag widgets** on the canvas or in Layers to place them above or below another view; the layout wraps to available space
+- **Pinch / Ctrl+wheel zoom** on the phone canvas (plus zoom controls). On a larger screen the phone auto-fits so the composition stays consistent
 - **Remove widgets** (Delete / Backspace, Layers trash, Inspector) including every binding, list bind, and prototype wire on the subtree
 - **Clear binds** without deleting the node — also walks children
 - **Prototype board** — see every screen, drag artboards, and wire a view click (or swipe / long-press / double-tap) to another screen
@@ -43,6 +46,9 @@ The KMP interpreter lives in **its own repository**: [bhargavcode/jetforge-kmp](
 - Upload **image and icon placeholders** from this device; bind `item.image` (or any API path) so the live response replaces the placeholder
 - Configure the screen **request**: HTTP method, header key-value pairs, query, JSON body, form-urlencoded, or multipart. Values accept `{{forms.search.query}}` and `{{route.*}}`
 - **Bind** tab shows Jetpack Compose properties next to the live **network model** — click a Compose target, then a response field
+- **Kotlin data models** — add or infer a `data class` from the API response and bind to `item.title` style fields
+- Visibility can follow **API data** (`visibleIf` path + compare) as well as loading / error / empty
+- Draw **wires** from a widget handle to another view or screen (Design + Prototype)
 - Form **validation** (required, min length) stored on the TextField
 - **Loading / error / empty / invalid** UI via `visibleWhen`
 - Press **Play** on the phone, then **Publish** for `/device/:id` and native apps
@@ -122,7 +128,7 @@ Nodes may include `modifiers` (alpha, offset, rotation, elevation, clip, surface
 
 - `src/components/designer` — drag-and-drop editor, Prototype board, request inspector
 - `src/components/preview` — Material 3 phone renderer (shared with `/device`)
-- `src/lib/schema.ts` — the document types (schema version 4)
+- `src/lib/schema.ts` — the document types (schema version 5)
 - `src/app/api/screens` — publish / fetch
 - `src/app/api/bind` — execute configured requests and return JSON for binding
 - `src/app/api/assets` — device uploads for image/icon placeholders

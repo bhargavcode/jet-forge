@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { DndContext } from "@dnd-kit/core";
 import { ComposeNode } from "@/components/preview/ComposePreview";
 import { RuntimeHost, useRuntimeScope } from "@/components/runtime/RuntimeHost";
 import { currentRoot, normalizeDocument } from "@/lib/document";
@@ -79,9 +80,11 @@ export default function DevicePage() {
           <span className="text-[10px] uppercase tracking-[0.2em] opacity-70">Compose runtime</span>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <RuntimeHost key={document.id} document={document} mode="device">
-            <DeviceCanvas document={document} />
-          </RuntimeHost>
+          <DndContext>
+            <RuntimeHost key={document.id} document={document} mode="device">
+              <DeviceCanvas document={document} />
+            </RuntimeHost>
+          </DndContext>
         </div>
       </div>
     </div>

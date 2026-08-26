@@ -36,6 +36,7 @@ export interface ScreenWire {
   event: TouchEvent;
   actionType: string;
   toScreenId: string | null;
+  toNodeId?: string;
 }
 
 export function collectWires(document: ScreenDocument): ScreenWire[] {
@@ -50,14 +51,15 @@ export function collectWires(document: ScreenDocument): ScreenWire[] {
             : item.action.type === "back"
               ? null
               : null;
-        if (item.action.type === "navigate" || item.action.type === "submitForm" || item.action.type === "back") {
+        if (item.action.type === "navigate" || item.action.type === "submitForm" || item.action.type === "back" || item.action.type === "focusNode") {
           wires.push({
             fromScreenId: screen.id,
             fromNodeId: node.id,
             fromNodeType: node.type,
             event: item.event,
             actionType: item.action.type,
-            toScreenId,
+            toScreenId: item.action.type === "focusNode" ? screen.id : toScreenId,
+            toNodeId: item.action.nodeId,
           });
         }
       }

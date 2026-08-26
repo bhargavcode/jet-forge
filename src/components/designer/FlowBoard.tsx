@@ -233,6 +233,8 @@ export function FlowBoard() {
                   <button
                     key={node.id}
                     type="button"
+                    data-wire-screen={screen.id}
+                    data-wire-node={node.id}
                     className={cn(
                       "flex w-full items-center justify-between rounded-md bg-muted px-2 py-1 text-left text-[11px]",
                       selectedId === node.id && "bg-primary text-primary-foreground",
@@ -251,6 +253,33 @@ export function FlowBoard() {
                         y: p.y,
                       });
                     }}
+                    onPointerUp={(event) => {
+                      event.stopPropagation();
+                      if (!wire || wire.fromNodeId === node.id) {
+                        setWire(null);
+                        return;
+                      }
+                      const from = document.screens.find((item) => item.id === wire.fromScreenId);
+                      const fromNode = from ? findIn(from.root, wire.fromNodeId) : null;
+                      if (!from || !fromNode) {
+                        setWire(null);
+                        return;
+                      }
+                      const list = interactionsOf(fromNode).filter((item) => item.event !== "tap");
+                      const action =
+                        wire.fromScreenId === screen.id
+                          ? { type: "focusNode" as const, nodeId: node.id }
+                          : {
+                              type: "navigate" as const,
+                              screenId: screen.id,
+                              nodeId: node.id,
+                              params: fromNode.itemBinding ? { article: "item" } : undefined,
+                            };
+                      list.push({ event: "tap", action });
+                      useDesigner.getState().setCurrentScreen(from.id);
+                      useDesigner.getState().patchNode(fromNode.id, { interactions: list, onClick: action });
+                      setWire(null);
+                    }}
                   >
                     <span>{node.type}</span>
                     <span data-handle="1" className="size-2 rounded-full bg-primary" />
@@ -261,7 +290,7 @@ export function FlowBoard() {
           );
         })}
         <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] text-muted-foreground">
-          All screens sit on this board. Drag a hotspot onto another artboard to wire tap → navigate.
+          Drag a hotspot onto another screen or widget to wire the interaction.
         </p>
       </div>
     </div>

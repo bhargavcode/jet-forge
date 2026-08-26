@@ -189,6 +189,13 @@ export function RuntimeHost({
         }
         return;
       }
+      if (action.type === "focusNode" && action.nodeId) {
+        window.document.querySelector(`[data-node-id="${action.nodeId}"]`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+        return;
+      }
       if (action.type === "navigate" && action.screenId) {
         const params = resolveActionParams(action, actionScope);
         const nextRoute = { ...route, ...params };
@@ -197,6 +204,13 @@ export function RuntimeHost({
         setScreenId(action.screenId);
         setFormErrors({});
         void fetchScreen(action.screenId, nextRoute, formValues);
+        if (action.nodeId) {
+          requestAnimationFrame(() => {
+            window.document
+              .querySelector(`[data-node-id="${action.nodeId}"]`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        }
       }
     },
     [activeScreen.root, activeScreenId, fetchScreen, formValues, route],

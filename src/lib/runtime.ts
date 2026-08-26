@@ -156,7 +156,23 @@ export function isNodeVisible(
   visibleWhen: VisibleWhen | undefined,
   state: VisibleWhen | UiRuntimeState,
   hasFormError = false,
+  visibleIf?: { path: string; op?: string; value?: string },
+  scope?: BindingScope,
 ) {
+  if (visibleIf?.path && scope) {
+    const raw = getByPath(scope, visibleIf.path);
+    const op = visibleIf.op ?? "truthy";
+    const text = raw == null ? "" : typeof raw === "object" ? JSON.stringify(raw) : String(raw);
+    const empty = raw == null || text === "" || (Array.isArray(raw) && raw.length === 0);
+    let pass = true;
+    if (op === "truthy") pass = !empty && raw !== false && raw !== 0;
+    else if (op === "falsy") pass = empty || raw === false || raw === 0;
+    else if (op === "empty") pass = empty;
+    else if (op === "notEmpty") pass = !empty;
+    else if (op === "equals") pass = text === (visibleIf.value ?? "");
+    else if (op === "notEquals") pass = text !== (visibleIf.value ?? "");
+    if (!pass) return false;
+  }
   const when = visibleWhen ?? "always";
   if (when === "always") return true;
   if (when === "invalid") return hasFormError;

@@ -2,7 +2,7 @@
 
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useRef } from "react";
-import { useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Bell,
   Heart,
@@ -32,6 +32,7 @@ import type {
   TouchEvent,
   UiNode,
 } from "@/lib/schema";
+import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<IconName, typeof Home> = {
@@ -116,8 +117,9 @@ function modifierStyle(modifiers: ModifierSpec): CSSProperties {
     (modifiers.backgroundToken ? COLOR_VAR[modifiers.backgroundToken] : undefined);
   const borderColor = modifiers.borderToken ? COLOR_VAR[modifiers.borderToken] : undefined;
   return {
-    width: modifiers.fillMaxWidth ? "100%" : dp(modifiers.widthDp),
-    height: modifiers.fillMaxHeight ? "100%" : dp(modifiers.heightDp),
+    width: modifiers.fillMaxWidth ? "100%" : modifiers.widthDp != null ? dp(modifiers.widthDp) : "fit-content",
+    height: modifiers.fillMaxHeight ? "100%" : modifiers.heightDp != null ? dp(modifiers.heightDp) : "auto",
+    maxWidth: modifiers.fillMaxWidth ? "100%" : undefined,
     flex: modifiers.weight ? modifiers.weight : undefined,
     opacity: modifiers.alpha == null ? undefined : modifiers.alpha,
     transform: [
@@ -238,7 +240,7 @@ export function ComposeNode({
 }: NodeProps) {
   const runtime = useRuntime();
   const selected = selectedId === node.id;
-  if (runtime && !isNodeVisible(node.visibleWhen, runtime.uiState, runtime.hasFormError)) {
+  if (runtime && !isNodeVisible(node.visibleWhen, runtime.uiState, runtime.hasFormError, node.visibleIf, scope)) {
     return null;
   }
 
@@ -742,6 +744,20 @@ function NodeShell({
   const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consumed = useRef(false);
 
+  const drag = useDraggable({
+    id: `canvas-${node.id}`,
+    data: { source: "canvas", nodeId: node.id, type: node.type },
+    disabled: !interactive || node.type === "Scaffold",
+  });
+  const drop = useDroppable({
+    id: `node-${node.id}`,
+    data: { kind: "reorder", targetId: node.id, nodeId: node.id },
+    disabled: !interactive,
+  });
+  const startWire = useDesigner((s) => s.startWire);
+  const completeWire = useDesigner((s) => s.completeWire);
+  const canvasWire = useDesigner((s) => s.canvasWire);
+
   function fire(event: TouchEvent, stop: { stopPropagation: () => void }) {
     const action = actionForEvent(node, event);
     if (runtime?.enabled && action && action.type !== "none") {
@@ -789,10 +805,30 @@ function NodeShell({
 
   return (
     <div
+      ref={(nodeEl) => {
+        drag.setNodeRef(nodeEl);
+        drop.setNodeRef(nodeEl);
+      }}
       data-node-id={node.id}
       data-node-type={node.type}
+      {...(interactive && node.type !== "Scaffold" ? drag.listeners : {})}
+      {...(interactive && node.type !== "Scaffold" ? drag.attributes : {})}
       onPointerDown={runAction ? onPointerDown : undefined}
-      onPointerUp={runAction ? onPointerUp : undefined}
+      onPointerUp={
+        runAction
+          ? onPointerUp
+          : interactive
+            ? (event) => {
+                if (canvasWire && canvasWire.fromId !== node.id) {
+                  event.stopPropagation();
+                  const message = completeWire({ nodeId: node.id });
+                  if (message) {
+                    /* toast from designer overlay */
+                  }
+                }
+              }
+            : undefined
+      }
       onPointerCancel={() => {
         if (longTimer.current) clearTimeout(longTimer.current);
         start.current = null;
@@ -808,12 +844,14 @@ function NodeShell({
             : undefined
       }
       className={cn(
-        "relative min-w-0",
+        "relative min-w-0 max-w-full",
         animationClass(node.animation),
         clipClass(node.modifiers.clip),
         interactive && "cursor-pointer",
         runAction && "cursor-pointer",
         selected && interactive && "m3-selected",
+        drop.isOver && interactive && "m3-drop-over",
+        drag.isDragging && "opacity-40",
         extraClass,
       )}
       style={{
@@ -825,6 +863,19 @@ function NodeShell({
       }}
     >
       {children}
+      {selected && interactive ? (
+        <button
+          type="button"
+          data-wire-handle="1"
+          title="Drag to another view or screen to wire"
+          className="absolute -right-1 top-1 z-20 size-3 rounded-full bg-[#6750A4] ring-2 ring-white"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            startWire(node.id, event.clientX, event.clientY);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

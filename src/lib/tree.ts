@@ -48,6 +48,7 @@ export function updateNode(root: UiNode, id: string, patch: Partial<UiNode>): Ui
       drawable: patch.drawable === undefined ? node.drawable : patch.drawable,
       animation: patch.animation === undefined ? node.animation : patch.animation,
       visibleWhen: patch.visibleWhen !== undefined ? patch.visibleWhen : node.visibleWhen,
+      visibleIf: "visibleIf" in patch ? patch.visibleIf : node.visibleIf,
     };
   });
 }
@@ -75,6 +76,21 @@ export function insertChild(
     children.splice(at, 0, child);
     return { ...node, children };
   });
+}
+
+export function relocateNode(root: UiNode, nodeId: string, parentId: string, index: number): UiNode {
+  if (nodeId === parentId || nodeId === root.id) return root;
+  const moving = findNode(root, nodeId);
+  const parent = findNode(root, parentId);
+  if (!moving || !parent || !acceptsChild(parent.type, moving.type)) return root;
+  if (collectIds(moving).includes(parentId)) return root;
+  const oldParent = findParent(root, nodeId);
+  let at = index;
+  if (oldParent?.id === parentId && oldParent.children) {
+    const oldIndex = oldParent.children.findIndex((child) => child.id === nodeId);
+    if (oldIndex >= 0 && oldIndex < at) at -= 1;
+  }
+  return insertChild(removeNode(root, nodeId), parentId, moving, at);
 }
 
 export function moveChild(root: UiNode, id: string, direction: -1 | 1): UiNode {

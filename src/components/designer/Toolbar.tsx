@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { HelpCircle, Moon, Play, Redo2, RotateCcw, Square, Sun, Undo2, Upload } from "lucide-react";
+import { Minus, Plus, HelpCircle, Moon, Play, Redo2, RotateCcw, Square, Sun, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -38,6 +38,8 @@ export function Toolbar() {
   const redo = useDesigner((s) => s.redo);
   const canUndo = useDesigner((s) => s.past.length > 0);
   const canRedo = useDesigner((s) => s.future.length > 0);
+  const canvasZoom = useDesigner((s) => s.canvasZoom);
+  const setCanvasZoom = useDesigner((s) => s.setCanvasZoom);
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
 
@@ -115,6 +117,17 @@ export function Toolbar() {
         </Button>
         <Button size="icon-sm" variant="ghost" disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" onClick={redo}>
           <Redo2 className="size-3.5" />
+        </Button>
+      </div>
+      <div className="flex items-center rounded-lg border p-0.5">
+        <Button size="icon-sm" variant="ghost" title="Zoom out" onClick={() => setCanvasZoom(canvasZoom - 0.1)}>
+          <Minus className="size-3.5" />
+        </Button>
+        <button type="button" className="min-w-10 px-1 text-[11px]" onClick={() => setCanvasZoom(1)}>
+          {Math.round(canvasZoom * 100)}%
+        </button>
+        <Button size="icon-sm" variant="ghost" title="Zoom in" onClick={() => setCanvasZoom(canvasZoom + 0.1)}>
+          <Plus className="size-3.5" />
         </Button>
       </div>
       <div className="ml-auto flex rounded-lg border p-0.5">

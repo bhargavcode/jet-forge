@@ -8,6 +8,7 @@ import type {
   AssetRef,
   CanvasState,
   DataSource,
+  KotlinDataModel,
   NodeType,
   ScreenDef,
   ScreenDocument,
@@ -15,6 +16,7 @@ import type {
   UiNode,
   WorkspaceMode,
 } from "./schema";
+import { interactionsOf } from "./interactions";
 import { createStarterScreen } from "./starter-screen";
 import {
   acceptsChild,
@@ -25,11 +27,19 @@ import {
   insertChild,
   mapTree,
   moveChild,
+  relocateNode,
   removeNode,
   stripBindingsToSource,
   stripWiresToScreens,
   updateNode,
 } from "./tree";
+
+export interface DesignerLayout {
+  leftW: number;
+  rightW: number;
+  leftSplit: number;
+  rightSplit: number;
+}
 
 interface DesignerSnapshot {
   screen: ScreenDocument;
@@ -50,6 +60,9 @@ interface DesignerState {
   workspaceMode: WorkspaceMode;
   past: DesignerSnapshot[];
   future: DesignerSnapshot[];
+  layout: DesignerLayout;
+  canvasZoom: number;
+  canvasWire: { fromId: string; x: number; y: number; ox: number; oy: number } | null;
   select: (id: string | null) => void;
   setName: (name: string) => void;
   setTheme: (theme: ScreenDocument["theme"]) => void;
@@ -59,6 +72,7 @@ interface DesignerState {
   patchCurrentScreen: (patch: Partial<ScreenDef>) => void;
   addNode: (parentId: string, type: NodeType, slot?: SlotName) => string | null;
   patchNode: (id: string, patch: Partial<UiNode>) => void;
+  relocateNode: (nodeId: string, parentId: string, index: number) => string | null;
   deleteSelected: () => string | null;
   clearSelectedWiring: () => string | null;
   moveSelected: (direction: -1 | 1) => void;
@@ -70,6 +84,16 @@ interface DesignerState {
   setPlayMode: (play: boolean) => void;
   setCanvasState: (state: CanvasState) => void;
   setWorkspaceMode: (mode: WorkspaceMode) => void;
+  setLayout: (patch: Partial<DesignerLayout>) => void;
+  setCanvasZoom: (zoom: number) => void;
+  startWire: (fromId: string, x: number, y: number) => void;
+  updateWire: (x: number, y: number) => void;
+  cancelWire: () => void;
+  completeWire: (target: { nodeId?: string; screenId?: string }) => string | null;
+  addDataModel: (model?: KotlinDataModel) => void;
+  patchDataModel: (id: string, patch: Partial<KotlinDataModel>) => void;
+  removeDataModel: (id: string) => void;
+  setActiveModelId: (id: string | null) => void;
   addAsset: (asset: AssetRef) => void;
   undo: () => void;
   redo: () => void;
@@ -116,6 +140,9 @@ export const useDesigner = create<DesignerState>()(
         workspaceMode: "design",
         past: [],
         future: [],
+        layout: { leftW: 240, rightW: 320, leftSplit: 0.5, rightSplit: 0.58 },
+        canvasZoom: 1,
+        canvasWire: null,
         select: (id) => set({ selectedId: id }),
         setName: (name) => set({ ...historyPatch(), screen: { ...get().screen, name } }),
         setTheme: (theme) => set({ ...historyPatch(), screen: { ...get().screen, theme } }),
@@ -240,6 +267,20 @@ export const useDesigner = create<DesignerState>()(
           const root = currentRoot(screen, currentScreenId);
           set({ ...historyPatch(), screen: withRoot(screen, currentScreenId, moveChild(root, selectedId, direction)) });
         },
+        relocateNode: (nodeId, parentId, index) => {
+          const { screen, currentScreenId } = get();
+          const root = currentRoot(screen, currentScreenId);
+          const moving = findNode(root, nodeId);
+          if (!moving) return null;
+          const next = relocateNode(root, nodeId, parentId, index);
+          if (next === root) return "That drop is not allowed for this widget.";
+          set({
+            ...historyPatch(),
+            screen: withRoot(screen, currentScreenId, next),
+            selectedId: nodeId,
+          });
+          return `Moved ${moving.type} into the layout.`;
+        },
         addDataSource: () => {
           const source: DataSource = {
             id: `api_${Math.random().toString(36).slice(2, 7)}`,
@@ -305,6 +346,105 @@ export const useDesigner = create<DesignerState>()(
         setPlayMode: (play) => set({ playMode: play, workspaceMode: play ? "design" : get().workspaceMode }),
         setCanvasState: (canvasState) => set({ canvasState }),
         setWorkspaceMode: (workspaceMode) => set({ workspaceMode, playMode: false }),
+        setLayout: (patch) => {
+          const layout = get().layout;
+          set({
+            layout: {
+              leftW: Math.min(420, Math.max(180, patch.leftW ?? layout.leftW)),
+              rightW: Math.min(520, Math.max(240, patch.rightW ?? layout.rightW)),
+              leftSplit: Math.min(0.78, Math.max(0.22, patch.leftSplit ?? layout.leftSplit)),
+              rightSplit: Math.min(0.82, Math.max(0.28, patch.rightSplit ?? layout.rightSplit)),
+            },
+          });
+        },
+        setCanvasZoom: (zoom) => set({ canvasZoom: Math.min(2.4, Math.max(0.45, zoom)) }),
+        startWire: (fromId, x, y) => set({ canvasWire: { fromId, x, y, ox: x, oy: y } }),
+        updateWire: (x, y) => {
+          const wire = get().canvasWire;
+          if (wire) set({ canvasWire: { ...wire, x, y } });
+        },
+        cancelWire: () => set({ canvasWire: null }),
+        completeWire: (target) => {
+          const { canvasWire, screen, currentScreenId, selectedId } = get();
+          if (!canvasWire) return null;
+          const fromId = canvasWire.fromId;
+          set({ canvasWire: null });
+          const root = currentRoot(screen, currentScreenId);
+          const from = findNode(root, fromId);
+          if (!from) return null;
+          const list = interactionsOf(from).filter((item) => item.event !== "tap");
+          if (target.screenId) {
+            const action = {
+              type: "navigate" as const,
+              screenId: target.screenId,
+              nodeId: target.nodeId,
+              params: from.itemBinding ? { article: "item" } : undefined,
+            };
+            list.push({ event: "tap", action });
+            set({
+              ...historyPatch(),
+              screen: withRoot(screen, currentScreenId, updateNode(root, fromId, { interactions: list, onClick: action })),
+              selectedId: selectedId ?? fromId,
+            });
+            return `Wired ${from.type} → ${target.screenId}`;
+          }
+          if (target.nodeId && target.nodeId !== fromId) {
+            const action = { type: "focusNode" as const, nodeId: target.nodeId };
+            list.push({ event: "tap", action });
+            set({
+              ...historyPatch(),
+              screen: withRoot(screen, currentScreenId, updateNode(root, fromId, { interactions: list, onClick: action })),
+              selectedId: fromId,
+            });
+            return `Wired ${from.type} → view ${target.nodeId}`;
+          }
+          return null;
+        },
+        addDataModel: (model) => {
+          const screen = get().screen;
+          const next = model ?? {
+            id: `model_${Math.random().toString(36).slice(2, 7)}`,
+            name: "Item",
+            kotlin: "data class Item(\n    val title: String,\n    val description: String\n)",
+            fields: [
+              { name: "title", type: "String" },
+              { name: "description", type: "String" },
+            ],
+          };
+          set({
+            ...historyPatch(),
+            screen: {
+              ...screen,
+              dataModels: [...(screen.dataModels ?? []), next],
+              activeModelId: next.id,
+            },
+          });
+        },
+        patchDataModel: (id, patch) => {
+          const screen = get().screen;
+          set({
+            ...historyPatch(),
+            screen: {
+              ...screen,
+              dataModels: (screen.dataModels ?? []).map((item) => (item.id === id ? { ...item, ...patch } : item)),
+            },
+          });
+        },
+        removeDataModel: (id) => {
+          const screen = get().screen;
+          const dataModels = (screen.dataModels ?? []).filter((item) => item.id !== id);
+          set({
+            ...historyPatch(),
+            screen: {
+              ...screen,
+              dataModels,
+              activeModelId: screen.activeModelId === id ? dataModels[0]?.id : screen.activeModelId,
+            },
+          });
+        },
+        setActiveModelId: (id) => {
+          set({ ...historyPatch(), screen: { ...get().screen, activeModelId: id ?? undefined } });
+        },
         addAsset: (asset) => {
           const screen = get().screen;
           const assets = [asset, ...(screen.assets ?? []).filter((item) => item.id !== asset.id)];
@@ -366,12 +506,14 @@ export const useDesigner = create<DesignerState>()(
       };
     },
     {
-      name: "compose-studio-draft-v6",
+      name: "compose-studio-draft-v7",
       partialize: (state) => ({
         screen: state.screen,
         currentScreenId: state.currentScreenId,
         selectedId: state.selectedId,
         liveData: state.liveData,
+        layout: state.layout,
+        canvasZoom: state.canvasZoom,
       }),
       merge: (persisted, current) => {
         const raw = (persisted as Partial<DesignerState>) ?? {};
@@ -383,6 +525,8 @@ export const useDesigner = create<DesignerState>()(
           currentScreenId: raw.currentScreenId ?? screen.startScreenId,
           past: [],
           future: [],
+          layout: { ...current.layout, ...(raw.layout ?? {}) },
+          canvasZoom: typeof raw.canvasZoom === "number" ? raw.canvasZoom : current.canvasZoom,
         };
       },
     },

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4 as const;
+export const SCHEMA_VERSION = 5 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -94,7 +94,7 @@ export type CanvasState = "auto" | VisibleWhen;
 
 export type WorkspaceMode = "design" | "prototype";
 
-export type ActionType = "none" | "navigate" | "back" | "submitForm" | "retry" | "openUrl" | "callApi";
+export type ActionType = "none" | "navigate" | "back" | "submitForm" | "retry" | "openUrl" | "callApi" | "focusNode";
 
 export type TouchEvent =
   | "tap"
@@ -165,10 +165,34 @@ export interface EnterAnimation {
 export interface ClickAction {
   type: ActionType;
   screenId?: string;
+  nodeId?: string;
   params?: Record<string, string>;
   url?: string;
   formId?: string;
   dataSourceId?: string;
+}
+
+export type VisibleIfOp = "truthy" | "falsy" | "equals" | "notEquals" | "empty" | "notEmpty";
+
+export interface VisibleIf {
+  path: string;
+  op?: VisibleIfOp;
+  value?: string;
+}
+
+export interface KotlinModelField {
+  name: string;
+  type: string;
+  nullable?: boolean;
+}
+
+export interface KotlinDataModel {
+  id: string;
+  name: string;
+  kotlin: string;
+  fields: KotlinModelField[];
+  sourceId?: string;
+  listPath?: string;
 }
 
 export interface Interaction {
@@ -211,6 +235,7 @@ export interface UiNode {
   interactions?: Interaction[];
   formField?: FormFieldSpec;
   visibleWhen?: VisibleWhen;
+  visibleIf?: VisibleIf;
 }
 
 export interface DataSource {
@@ -263,6 +288,8 @@ export interface ScreenDocument {
   startScreenId: string;
   root: UiNode;
   assets?: AssetRef[];
+  dataModels?: KotlinDataModel[];
+  activeModelId?: string;
   publishedAt?: string;
 }
 

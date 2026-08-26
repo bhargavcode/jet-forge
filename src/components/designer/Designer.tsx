@@ -15,10 +15,13 @@ import { Palette } from "./Palette";
 import { Layers } from "./Layers";
 import { Inspector } from "./Inspector";
 import { DataSourcesPanel } from "./DataSourcesPanel";
+import { KotlinModelsPanel } from "./KotlinModelsPanel";
 import { Toolbar } from "./Toolbar";
 import { PhoneFrame } from "./PhoneFrame";
 import { FlowBoard } from "./FlowBoard";
 import { HistoryHotkeys } from "./HistoryHotkeys";
+import { CanvasStage } from "./CanvasStage";
+import { HorizontalResize, VerticalResize } from "./PaneSplit";
 import { cn } from "@/lib/utils";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -35,12 +38,15 @@ export function Designer() {
   const selectedId = useDesigner((s) => s.selectedId);
   const select = useDesigner((s) => s.select);
   const addNode = useDesigner((s) => s.addNode);
+  const relocate = useDesigner((s) => s.relocateNode);
   const previewData = useDesigner((s) => s.previewData);
   const previewErrors = useDesigner((s) => s.previewErrors);
   const liveData = useDesigner((s) => s.liveData);
   const playMode = useDesigner((s) => s.playMode);
   const canvasState = useDesigner((s) => s.canvasState);
   const workspaceMode = useDesigner((s) => s.workspaceMode);
+  const layout = useDesigner((s) => s.layout);
+  const setLayout = useDesigner((s) => s.setLayout);
   const [activeType, setActiveType] = useState<NodeType | null>(null);
   const [mobileTab, setMobileTab] = useState("canvas");
   const hydrated = useSyncExternalStore(
@@ -64,9 +70,13 @@ export function Designer() {
 
   function onDragEnd(event: DragEndEvent) {
     setActiveType(null);
-    const type = event.active.data.current?.type as NodeType | undefined;
-    const targetId = String(event.over?.data.current?.targetId ?? event.over?.id ?? "");
-    if (!type || !targetId || targetId.startsWith("palette-")) return;
+    const data = event.active.data.current as
+      | { source?: string; type?: NodeType; nodeId?: string }
+      | undefined;
+    const over = event.over;
+    if (!over) return;
+    const targetId = String(over.data.current?.targetId ?? over.id ?? "");
+    if (!targetId || targetId.startsWith("palette-") || String(over.id).startsWith("layer-") && !over.data.current) return;
 
     let parentId = targetId;
     let slot: SlotName | undefined;
@@ -76,6 +86,45 @@ export function Designer() {
       slot = slotName;
     }
 
+    if (data?.source === "canvas" && data.nodeId) {
+      if (data.nodeId === parentId) return;
+      const kind = over?.data.current?.kind;
+      if (kind === "reorder") {
+        const target = findNode(root, parentId);
+        const parent = target ? findParent(root, parentId) : null;
+        if (!target || !parent?.children) return;
+        const index = parent.children.findIndex((child) => child.id === parentId);
+        const translated = event.active.rect.current.translated;
+        const after = translated ? translated.top + translated.height / 2 > over.rect.top + over.rect.height / 2 : false;
+        const message = relocate(data.nodeId, parent.id, Math.max(0, index + (after ? 1 : 0)));
+        if (message) toast.message(message);
+        return;
+      }
+      const parent = findNode(root, parentId);
+      if (!parent) return;
+      if (!acceptsChild(parent.type, data.type as NodeType)) {
+        toast.error(`${data.type} cannot be dropped on ${parent.type}`);
+        return;
+      }
+      const message = relocate(data.nodeId, parentId, parent.children?.length ?? 0);
+      if (message) toast.message(message);
+      return;
+    }
+
+    const type = data?.type;
+    if (!type) return;
+    const kind = over.data.current?.kind;
+    if (kind === "reorder") {
+      const target = findNode(root, parentId);
+      const parent = target ? findParent(root, parentId) : null;
+      if (!parent) return;
+      if (!acceptsChild(parent.type, type)) {
+        toast.error(`${type} cannot be dropped on ${parent.type}`);
+        return;
+      }
+      addNode(parent.id, type, slot);
+      return;
+    }
     const parent = findNode(root, parentId);
     if (!parent) return;
     if (!acceptsChild(parent.type, type)) {
@@ -116,27 +165,35 @@ export function Designer() {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <HistoryHotkeys />
         <Toolbar />
-        <div className="flex min-h-0 flex-1">
-          <aside className="hidden w-[240px] shrink-0 flex-col border-r md:flex">
-            <div className="h-1/2 min-h-0 border-b">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <aside
+            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-r md:flex"
+            style={{ width: layout.leftW }}
+          >
+            <div className="min-h-0 overflow-hidden" style={{ flex: `${layout.leftSplit} 1 0` }}>
               <Palette onAdd={addToSelection} />
             </div>
-            <div className="h-1/2 min-h-0">
+            <HorizontalResize
+              onDelta={(dy) => {
+                const total = 600;
+                setLayout({ leftSplit: layout.leftSplit + dy / total });
+              }}
+            />
+            <div className="min-h-0 overflow-hidden" style={{ flex: `${1 - layout.leftSplit} 1 0` }}>
               <Layers />
             </div>
           </aside>
+          <VerticalResize className="hidden md:block" onDelta={(dx) => setLayout({ leftW: layout.leftW + dx })} />
           <main
             className={cn(
-              "relative flex min-h-0 min-w-0 flex-1 bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)]",
-              workspaceMode === "prototype"
-                ? "items-stretch overflow-hidden p-0"
-                : "items-center justify-center overflow-auto p-4 md:p-8",
+              "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)]",
+              workspaceMode === "prototype" ? "items-stretch" : "items-stretch",
             )}
           >
-            <div className="md:hidden absolute top-2 left-2 right-2 z-10">
+            <div className="absolute top-2 right-2 left-2 z-10 md:hidden">
               <Tabs value={mobileTab} onValueChange={setMobileTab}>
                 <TabsList className="w-full">
                   <TabsTrigger value="palette">Components</TabsTrigger>
@@ -145,51 +202,67 @@ export function Designer() {
                 </TabsList>
               </Tabs>
             </div>
-            <div className={mobileTab !== "palette" ? "hidden md:hidden" : "md:hidden w-full pt-12"}>
+            <div className={mobileTab !== "palette" ? "hidden md:hidden" : "w-full pt-12 md:hidden"}>
               <div className="rounded-xl border bg-background">
                 <Palette onAdd={addToSelection} />
               </div>
             </div>
-            <div className={mobileTab !== "inspect" ? "hidden md:hidden" : "md:hidden w-full pt-12"}>
-              <div className="h-[70vh] rounded-xl border bg-background">
+            <div className={mobileTab !== "inspect" ? "hidden md:hidden" : "w-full pt-12 md:hidden"}>
+              <div className="h-[70vh] overflow-hidden rounded-xl border bg-background">
                 <Inspector />
               </div>
             </div>
             <div
               className={cn(
-                mobileTab === "canvas" || mobileTab === "inspect" ? "md:block" : "hidden md:block",
-                workspaceMode === "prototype" && "h-full min-h-0 w-full flex-1",
+                "flex min-h-0 min-w-0 flex-1",
+                mobileTab === "canvas" || mobileTab === "inspect" ? "md:flex" : "hidden md:flex",
               )}
             >
               {workspaceMode === "prototype" ? (
                 <FlowBoard />
               ) : (
-                <RuntimeHost
-                  key={playMode ? `play-${screen.id}` : `edit-${screen.id}`}
-                  document={screen}
-                  mode={playMode ? "play" : "edit"}
-                  canvasState={canvasState}
-                  editScreenId={currentScreenId}
-                  liveData={liveData}
-                  previewData={previewData}
-                  previewErrors={previewErrors}
-                >
-                  <PhoneFrame
+                <CanvasStage>
+                  <RuntimeHost
+                    key={playMode ? `play-${screen.id}` : `edit-${screen.id}`}
                     document={screen}
-                    selectedId={playMode ? null : selectedId}
-                    onSelect={select}
-                    interactive={!playMode}
-                  />
-                </RuntimeHost>
+                    mode={playMode ? "play" : "edit"}
+                    canvasState={canvasState}
+                    editScreenId={currentScreenId}
+                    liveData={liveData}
+                    previewData={previewData}
+                    previewErrors={previewErrors}
+                  >
+                    <PhoneFrame
+                      document={screen}
+                      selectedId={playMode ? null : selectedId}
+                      onSelect={select}
+                      interactive={!playMode}
+                    />
+                  </RuntimeHost>
+                </CanvasStage>
               )}
             </div>
           </main>
-          <aside className="hidden w-[300px] shrink-0 flex-col border-l lg:flex">
-            <div className="h-[58%] min-h-0 border-b">
+          <VerticalResize className="hidden lg:block" onDelta={(dx) => setLayout({ rightW: layout.rightW - dx })} />
+          <aside
+            className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-l lg:flex"
+            style={{ width: layout.rightW }}
+          >
+            <div className="min-h-0 overflow-hidden" style={{ flex: `${layout.rightSplit} 1 0` }}>
               <Inspector />
             </div>
-            <div className="min-h-0 flex-1">
-              <DataSourcesPanel />
+            <HorizontalResize
+              onDelta={(dy) => {
+                setLayout({ rightSplit: layout.rightSplit + dy / 600 });
+              }}
+            />
+            <div className="flex min-h-0 flex-col overflow-hidden" style={{ flex: `${1 - layout.rightSplit} 1 0` }}>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <DataSourcesPanel />
+              </div>
+              <div className="max-h-[46%] min-h-0 overflow-auto">
+                <KotlinModelsPanel />
+              </div>
             </div>
           </aside>
         </div>

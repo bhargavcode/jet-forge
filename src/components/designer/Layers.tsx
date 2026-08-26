@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,15 +23,32 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
   const selectedId = useDesigner((s) => s.selectedId);
   const select = useDesigner((s) => s.select);
   const selected = selectedId === node.id;
+  const drag = useDraggable({
+    id: `layer-${node.id}`,
+    data: { source: "canvas", nodeId: node.id, type: node.type },
+    disabled: node.type === "Scaffold",
+  });
+  const drop = useDroppable({
+    id: `layer-drop-${node.id}`,
+    data: { kind: "reorder", targetId: node.id, nodeId: node.id },
+  });
 
   return (
     <>
       <button
         type="button"
+        ref={(el) => {
+          drag.setNodeRef(el);
+          drop.setNodeRef(el);
+        }}
+        {...drag.listeners}
+        {...drag.attributes}
         onClick={() => select(node.id)}
         className={cn(
           "flex w-full items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted",
           selected && "bg-primary/10 text-primary",
+          drop.isOver && "m3-drop-over",
+          drag.isDragging && "opacity-40",
         )}
         style={{ paddingLeft: 8 + depth * 12 }}
       >
