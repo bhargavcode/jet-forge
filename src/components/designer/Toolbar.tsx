@@ -124,21 +124,29 @@ export function Toolbar() {
         <Switch checked={liveData} onCheckedChange={setLiveData} />
         Live API
       </label>
-      <select
-        className="h-8 rounded-lg border bg-background px-2 text-xs"
-        value={canvasState}
-        disabled={playMode}
-        onChange={(e) => setCanvasState(e.target.value as CanvasState)}
+      {workspaceMode === "design" ? (
+        <select
+          className="h-8 rounded-lg border bg-background px-2 text-xs"
+          value={canvasState}
+          disabled={playMode}
+          onChange={(e) => setCanvasState(e.target.value as CanvasState)}
+          title="Force a canvas UI state while designing"
+        >
+          <option value="auto">Canvas: ready</option>
+          <option value="loading">Canvas: loading</option>
+          <option value="error">Canvas: error</option>
+          <option value="empty">Canvas: empty</option>
+          <option value="invalid">Canvas: invalid</option>
+        </select>
+      ) : null}
+      <Button
+        size="sm"
+        variant={playMode ? "default" : "outline"}
+        title="Run the designed screens on the phone"
+        onClick={() => setPlayMode(!playMode)}
       >
-        <option value="auto">Canvas: ready</option>
-        <option value="loading">Canvas: loading</option>
-        <option value="error">Canvas: error</option>
-        <option value="empty">Canvas: empty</option>
-        <option value="invalid">Canvas: invalid</option>
-      </select>
-      <Button size="sm" variant={playMode ? "default" : "outline"} onClick={() => setPlayMode(!playMode)}>
         {playMode ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
-        {playMode ? "Stop" : "Play"}
+        {playMode ? "Stop" : "Play phone"}
       </Button>
       <Button size="sm" variant="ghost" onClick={reset}>
         <RotateCcw className="size-3.5" />

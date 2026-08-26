@@ -1,3 +1,4 @@
+import { normalizeDocument } from "./document";
 import type { ClickAction, ScreenDocument, UiNode } from "./schema";
 
 const fade = (delay = 0) => ({ type: "fade" as const, durationMs: 280, delayMs: delay, staggerMs: 40 });
@@ -395,8 +396,8 @@ export function createStarterScreen(): ScreenDocument {
     ],
   });
 
-  return {
-    schemaVersion: 2,
+  return normalizeDocument({
+    schemaVersion: 3,
     id: "us-briefing",
     name: "US Briefing",
     theme: { mode: "light", seed: "blue" },
@@ -407,14 +408,22 @@ export function createStarterScreen(): ScreenDocument {
         name: "US top headlines",
         url: "/api/news/us",
         method: "GET",
+        headerRows: [],
+        queryRows: [],
+        formRows: [],
+        bodyMode: "none",
         fallbackToMock: false,
         mock: newsMock,
       },
       {
         id: "search",
         name: "US news search",
-        url: "/api/news/us?q={{forms.search.query}}",
+        url: "/api/news/us",
         method: "GET",
+        headerRows: [],
+        queryRows: [{ key: "q", value: "{{forms.search.query}}" }],
+        formRows: [],
+        bodyMode: "none",
         fallbackToMock: false,
         mock: newsMock,
       },
@@ -427,6 +436,8 @@ export function createStarterScreen(): ScreenDocument {
         root: headlinesRoot,
         dataSourceIds: ["news"],
         emptyPath: "news.articles",
+        flowX: 56,
+        flowY: 48,
       },
       {
         id: "search",
@@ -435,6 +446,8 @@ export function createStarterScreen(): ScreenDocument {
         root: searchRoot,
         dataSourceIds: ["search"],
         emptyPath: "search.articles",
+        flowX: 476,
+        flowY: 48,
       },
       {
         id: "article",
@@ -442,8 +455,10 @@ export function createStarterScreen(): ScreenDocument {
         route: "/article",
         root: articleRoot,
         dataSourceIds: [],
+        flowX: 896,
+        flowY: 48,
       },
     ],
     root: headlinesRoot,
-  };
+  });
 }

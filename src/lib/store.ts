@@ -233,7 +233,7 @@ export const useDesigner = create<DesignerState>()(
       },
     }),
     {
-      name: "compose-studio-draft-v4",
+      name: "compose-studio-draft-v5",
       partialize: (state) => ({
         screen: state.screen,
         currentScreenId: state.currentScreenId,

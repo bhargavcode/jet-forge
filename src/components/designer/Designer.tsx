@@ -49,7 +49,9 @@ export function Designer() {
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: workspaceMode === "prototype" ? 10_000 : 6 },
+    }),
   );
 
   const root = currentRoot(screen, currentScreenId);
@@ -126,10 +128,10 @@ export function Designer() {
           </aside>
           <main
             className={cn(
-              "relative flex min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)]",
+              "relative flex min-h-0 min-w-0 flex-1 bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)]",
               workspaceMode === "prototype"
-                ? "items-stretch p-0"
-                : "items-center justify-center p-4 md:p-8",
+                ? "items-stretch overflow-hidden p-0"
+                : "items-center justify-center overflow-auto p-4 md:p-8",
             )}
           >
             <div className="md:hidden absolute top-2 left-2 right-2 z-10">
@@ -154,7 +156,7 @@ export function Designer() {
             <div
               className={cn(
                 mobileTab === "canvas" || mobileTab === "inspect" ? "md:block" : "hidden md:block",
-                workspaceMode === "prototype" && "h-full w-full",
+                workspaceMode === "prototype" && "h-full min-h-0 w-full flex-1",
               )}
             >
               {workspaceMode === "prototype" ? (
