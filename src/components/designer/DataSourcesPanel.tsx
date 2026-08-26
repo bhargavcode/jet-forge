@@ -17,6 +17,11 @@ import {
 import { useDesigner } from "@/lib/store";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import type { BodyMode, HttpMethod } from "@/lib/schema";
+import { KeyValueEditor } from "./KeyValueEditor";
+
+const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+const BODIES: BodyMode[] = ["none", "json", "form", "multipart"];
 
 export function DataSourcesPanel() {
   const dataSources = useDesigner((s) => s.screen.dataSources);
@@ -30,12 +35,13 @@ export function DataSourcesPanel() {
       ? activeId
       : (dataSources.find((source) => source.id === "news")?.id ?? dataSources[0]?.id);
   const source = dataSources.find((item) => item.id === selectedId);
+  const bodyMode = source?.bodyMode ?? (source?.body ? "json" : "none");
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Data sources
+          Request
         </span>
         <Button size="sm" variant="outline" onClick={addDataSource}>
           <Plus className="size-3.5" />
@@ -66,11 +72,13 @@ export function DataSourcesPanel() {
         <div className="space-y-4 p-3">
           {dataSources.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Add a REST endpoint. The Android runtime will call the same URL when this screen is published.
+              Configure the request this screen will fire: method, headers, query, JSON or form body. Bindings like
+              {" "}
+              <code>{"{{forms.search.query}}"}</code> work in any value. Native Android/iOS runtimes call the same request — not a WebView.
             </p>
           ) : null}
           {source ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <Label className="font-mono text-xs">{source.id}</Label>
                 <Button size="icon-sm" variant="ghost" onClick={() => removeDataSource(source.id)}>
@@ -86,17 +94,20 @@ export function DataSourcesPanel() {
                 <Select
                   value={source.method}
                   onValueChange={(method) => {
-                    if (method === "GET" || method === "POST") {
-                      patchDataSource(source.id, { method });
+                    if (METHODS.includes(method as HttpMethod)) {
+                      patchDataSource(source.id, { method: method as HttpMethod });
                     }
                   }}
                 >
-                  <SelectTrigger className="w-[96px]">
+                  <SelectTrigger className="w-[104px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="POST">POST</SelectItem>
+                    {METHODS.map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {method}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Input
@@ -105,12 +116,57 @@ export function DataSourcesPanel() {
                   placeholder="https://api.example.com/items"
                 />
               </div>
-              {source.method === "POST" ? (
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Headers</Label>
+                <KeyValueEditor
+                  rows={source.headerRows ?? []}
+                  onChange={(headerRows) => patchDataSource(source.id, { headerRows })}
+                  keyPlaceholder="Authorization"
+                  valuePlaceholder="Bearer {{route.token}}"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Query</Label>
+                <KeyValueEditor
+                  rows={source.queryRows ?? []}
+                  onChange={(queryRows) => patchDataSource(source.id, { queryRows })}
+                  keyPlaceholder="q"
+                  valuePlaceholder="{{forms.search.query}}"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Body</Label>
+                <Select
+                  value={bodyMode}
+                  onValueChange={(value) => value && patchDataSource(source.id, { bodyMode: value as BodyMode })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BODIES.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {mode === "json" ? "JSON" : mode === "form" ? "Form URL-encoded" : mode === "multipart" ? "Multipart form" : "None"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {bodyMode === "json" ? (
                 <Textarea
                   value={source.body ?? ""}
                   onChange={(e) => patchDataSource(source.id, { body: e.target.value })}
-                  placeholder='{"page":1}'
-                  rows={3}
+                  placeholder='{"page":1,"q":"{{forms.search.query}}"}'
+                  rows={4}
+                  className="font-mono text-xs"
+                />
+              ) : null}
+              {bodyMode === "form" || bodyMode === "multipart" ? (
+                <KeyValueEditor
+                  rows={source.formRows ?? []}
+                  onChange={(formRows) => patchDataSource(source.id, { formRows })}
+                  keyPlaceholder="field"
+                  valuePlaceholder="{{forms.search.query}}"
                 />
               ) : null}
               <label className="flex items-center justify-between gap-2 text-xs">

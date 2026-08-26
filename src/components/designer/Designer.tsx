@@ -17,6 +17,8 @@ import { Inspector } from "./Inspector";
 import { DataSourcesPanel } from "./DataSourcesPanel";
 import { Toolbar } from "./Toolbar";
 import { PhoneFrame } from "./PhoneFrame";
+import { FlowBoard } from "./FlowBoard";
+import { cn } from "@/lib/utils";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDesigner } from "@/lib/store";
@@ -37,6 +39,7 @@ export function Designer() {
   const liveData = useDesigner((s) => s.liveData);
   const playMode = useDesigner((s) => s.playMode);
   const canvasState = useDesigner((s) => s.canvasState);
+  const workspaceMode = useDesigner((s) => s.workspaceMode);
   const [activeType, setActiveType] = useState<NodeType | null>(null);
   const [mobileTab, setMobileTab] = useState("canvas");
   const hydrated = useSyncExternalStore(
@@ -121,7 +124,14 @@ export function Designer() {
               <Layers />
             </div>
           </aside>
-          <main className="relative flex min-w-0 flex-1 items-center justify-center overflow-auto bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)] p-4 md:p-8">
+          <main
+            className={cn(
+              "relative flex min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_#ece8f3,_#d8d3e0_62%,_#c9c4d2)]",
+              workspaceMode === "prototype"
+                ? "items-stretch p-0"
+                : "items-center justify-center p-4 md:p-8",
+            )}
+          >
             <div className="md:hidden absolute top-2 left-2 right-2 z-10">
               <Tabs value={mobileTab} onValueChange={setMobileTab}>
                 <TabsList className="w-full">
@@ -141,24 +151,33 @@ export function Designer() {
                 <Inspector />
               </div>
             </div>
-            <div className={mobileTab === "canvas" || mobileTab === "inspect" ? "md:block" : "hidden md:block"}>
-              <RuntimeHost
-                key={playMode ? `play-${screen.id}` : `edit-${screen.id}`}
-                document={screen}
-                mode={playMode ? "play" : "edit"}
-                canvasState={canvasState}
-                editScreenId={currentScreenId}
-                liveData={liveData}
-                previewData={previewData}
-                previewErrors={previewErrors}
-              >
-                <PhoneFrame
+            <div
+              className={cn(
+                mobileTab === "canvas" || mobileTab === "inspect" ? "md:block" : "hidden md:block",
+                workspaceMode === "prototype" && "h-full w-full",
+              )}
+            >
+              {workspaceMode === "prototype" ? (
+                <FlowBoard />
+              ) : (
+                <RuntimeHost
+                  key={playMode ? `play-${screen.id}` : `edit-${screen.id}`}
                   document={screen}
-                  selectedId={playMode ? null : selectedId}
-                  onSelect={select}
-                  interactive={!playMode}
-                />
-              </RuntimeHost>
+                  mode={playMode ? "play" : "edit"}
+                  canvasState={canvasState}
+                  editScreenId={currentScreenId}
+                  liveData={liveData}
+                  previewData={previewData}
+                  previewErrors={previewErrors}
+                >
+                  <PhoneFrame
+                    document={screen}
+                    selectedId={playMode ? null : selectedId}
+                    onSelect={select}
+                    interactive={!playMode}
+                  />
+                </RuntimeHost>
+              )}
             </div>
           </main>
           <aside className="hidden w-[300px] shrink-0 flex-col border-l lg:flex">

@@ -181,7 +181,11 @@ export function createNode(type: NodeType): UiNode {
 
 export const BINDABLE_PROPS: Partial<Record<NodeType, { key: string; label: string }[]>> = {
   Text: [{ key: "text", label: "Text" }],
-  Image: [{ key: "url", label: "Image URL" }],
+  Image: [
+    { key: "url", label: "Image URL (API)" },
+    { key: "accent", label: "Placeholder color" },
+  ],
+  Icon: [{ key: "url", label: "Custom icon URL" }],
   FilledButton: [{ key: "label", label: "Label" }],
   OutlinedButton: [{ key: "label", label: "Label" }],
   TextButton: [{ key: "label", label: "Label" }],

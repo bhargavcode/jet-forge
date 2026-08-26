@@ -28,7 +28,6 @@
 **/.gradle/
 **/build/
 **/.kotlin/
-kmp/local.properties
 *.iml
 .idea/
 
@@ -50,3 +49,4 @@ next-env.d.ts
 
 # published screens (local server store)
 /data/screens.json
+/data/assets/

@@ -1,6 +1,7 @@
 "use client";
 
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Bell,
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { resolveProp, type BindingScope } from "@/lib/bindings";
+import { actionForEvent, gestureFromDelta, hasRuntimeGestures } from "@/lib/interactions";
 import { isNodeVisible, resolveList } from "@/lib/runtime";
 import { useRuntime } from "@/lib/runtime-context";
 import type {
@@ -27,6 +29,7 @@ import type {
   ModifierSpec,
   NodeType,
   TextStyle,
+  TouchEvent,
   UiNode,
 } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -183,43 +186,22 @@ export function ComposeNode({
     return null;
   }
 
-  const runAction = runtime?.enabled && node.onClick && node.onClick.type !== "none";
-
-  const select = (event: MouseEvent) => {
-    if (runAction) {
-      event.stopPropagation();
-      runtime.dispatch(node.onClick!, scope);
-      return;
-    }
-    if (!interactive || !onSelect) return;
-    event.stopPropagation();
-    onSelect(node.id);
-  };
-
-  const handlesClick = Boolean(runAction || (interactive && onSelect));
+  const runAction = Boolean(runtime?.enabled && hasRuntimeGestures(node));
 
   const wrap = (content: ReactNode, extraClass = "", extraStyle?: CSSProperties) => (
-    <div
-      data-node-id={node.id}
-      data-node-type={node.type}
-      onClick={handlesClick ? select : undefined}
-      className={cn(
-        "relative min-w-0",
-        animationClass(node.animation),
-        clipClass(node.modifiers.clip),
-        interactive && "cursor-pointer",
-        runAction && "cursor-pointer",
-        selected && interactive && "m3-selected",
-        extraClass,
-      )}
-      style={{
-        ...modifierStyle(node.modifiers),
-        ...animationStyle(node.animation, itemIndex),
-        ...extraStyle,
-      }}
+    <NodeShell
+      node={node}
+      scope={scope}
+      selected={selected}
+      interactive={interactive}
+      onSelect={onSelect}
+      runAction={runAction}
+      itemIndex={itemIndex}
+      extraClass={extraClass}
+      extraStyle={extraStyle}
     >
       {content}
-    </div>
+    </NodeShell>
   );
 
   const children = node.children ?? [];
@@ -428,8 +410,8 @@ export function ComposeNode({
 
   if (node.type === "NavigationBarItem") {
     const selectedItem =
-      (runtime?.enabled && node.onClick?.screenId
-        ? runtime.screenId === node.onClick.screenId
+      (runtime?.enabled && actionForEvent(node, "tap")?.screenId
+        ? runtime.screenId === actionForEvent(node, "tap")?.screenId
         : Boolean(node.props.selected));
     const label = String(node.props.label ?? "Item");
     const icon = String(node.props.icon ?? "home");
@@ -601,8 +583,15 @@ export function ComposeNode({
 
   if (node.type === "Icon") {
     const color = COLOR_VAR[(node.props.color as ColorToken) || "primary"];
+    const url = String(resolveProp(node, "url", scope) ?? "");
+    const size = Number(node.props.size ?? 24);
     return wrap(
-      <MaterialIcon name={String(node.props.name ?? "star")} color={color} size={Number(node.props.size ?? 24)} />,
+      url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="object-contain" style={{ width: size, height: size }} />
+      ) : (
+        <MaterialIcon name={String(node.props.name ?? "star")} color={color} size={size} />
+      ),
       "w-auto inline-flex",
     );
   }
@@ -644,6 +633,121 @@ export function ComposeNode({
   }
 
   return wrap(<div className="text-xs text-[var(--md-error)]">Unknown {node.type}</div>);
+}
+
+function NodeShell({
+  node,
+  scope,
+  selected,
+  interactive,
+  onSelect,
+  runAction,
+  itemIndex,
+  extraClass,
+  extraStyle,
+  children,
+}: {
+  node: UiNode;
+  scope: BindingScope;
+  selected: boolean;
+  interactive: boolean;
+  onSelect?: (id: string) => void;
+  runAction: boolean;
+  itemIndex: number;
+  extraClass?: string;
+  extraStyle?: CSSProperties;
+  children: ReactNode;
+}) {
+  const runtime = useRuntime();
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const lastTap = useRef(0);
+  const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const consumed = useRef(false);
+
+  function fire(event: TouchEvent, stop: { stopPropagation: () => void }) {
+    const action = actionForEvent(node, event);
+    if (runtime?.enabled && action && action.type !== "none") {
+      stop.stopPropagation();
+      runtime.dispatch(action, scope);
+      return true;
+    }
+    return false;
+  }
+
+  function onPointerDown(event: ReactPointerEvent) {
+    if (!runAction) return;
+    start.current = { x: event.clientX, y: event.clientY };
+    consumed.current = false;
+    longTimer.current = setTimeout(() => {
+      consumed.current = true;
+      fire("longPress", event);
+    }, 500);
+  }
+
+  function onPointerUp(event: ReactPointerEvent) {
+    if (longTimer.current) {
+      clearTimeout(longTimer.current);
+      longTimer.current = null;
+    }
+    if (!runAction || consumed.current || !start.current) {
+      start.current = null;
+      return;
+    }
+    const classified = gestureFromDelta(event.clientX - start.current.x, event.clientY - start.current.y);
+    start.current = null;
+    if (classified !== "tap") {
+      fire(classified, event);
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      lastTap.current = 0;
+      fire("doubleTap", event);
+      return;
+    }
+    lastTap.current = now;
+    fire("tap", event);
+  }
+
+  return (
+    <div
+      data-node-id={node.id}
+      data-node-type={node.type}
+      onPointerDown={runAction ? onPointerDown : undefined}
+      onPointerUp={runAction ? onPointerUp : undefined}
+      onPointerCancel={() => {
+        if (longTimer.current) clearTimeout(longTimer.current);
+        start.current = null;
+      }}
+      onClick={
+        runAction
+          ? undefined
+          : interactive && onSelect
+            ? (event) => {
+                event.stopPropagation();
+                onSelect(node.id);
+              }
+            : undefined
+      }
+      className={cn(
+        "relative min-w-0",
+        animationClass(node.animation),
+        clipClass(node.modifiers.clip),
+        interactive && "cursor-pointer",
+        runAction && "cursor-pointer",
+        selected && interactive && "m3-selected",
+        extraClass,
+      )}
+      style={{
+        ...modifierStyle(node.modifiers),
+        ...animationStyle(node.animation, itemIndex),
+        ...extraStyle,
+        touchAction: runAction ? "none" : undefined,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 function EmptyHint({ label }: { label: string }) {

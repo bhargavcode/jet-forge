@@ -6,8 +6,16 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UiNode } from "@/lib/schema";
 import { currentRoot } from "@/lib/document";
+import { interactionsOf } from "@/lib/interactions";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
+
+function layerBadge(node: UiNode) {
+  if (node.visibleWhen && node.visibleWhen !== "always") return node.visibleWhen;
+  const gesture = interactionsOf(node).find((item) => item.action.type !== "none");
+  if (gesture) return `${gesture.event} ${gesture.action.type}`;
+  return node.slot;
+}
 
 function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
   const selectedId = useDesigner((s) => s.selectedId);
@@ -27,11 +35,7 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
       >
         <span className="truncate font-medium">{node.type}</span>
         <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
-          {node.visibleWhen && node.visibleWhen !== "always"
-            ? node.visibleWhen
-            : node.onClick && node.onClick.type !== "none"
-              ? node.onClick.type
-              : node.slot}
+          {layerBadge(node)}
         </span>
       </button>
       {node.children?.map((child) => (

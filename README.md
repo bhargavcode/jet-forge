@@ -1,8 +1,6 @@
 # Compose Studio
 
-A visual **Material 3** designer for Jetpack Compose screens. You drag official-style components onto a phone canvas, bind them to REST APIs, add enter motion, and **publish**. A Kotlin Multiplatform runtime then fetches that same JSON document and renders it on Android and iOS next to your traditional screens.
-
-This repo ships a working slice of that loop: designer → document → server → device runtime (web simulator + Kotlin sources).
+Visual **Material 3** designer for Jetpack Compose screens. You place official-style components on a phone canvas the way you would frames in Figma, bind them to REST APIs, wire prototype routes, and **publish**. A separate Kotlin Multiplatform runtime ([jetforge-kmp](https://github.com/bhargavcode/jetforge-kmp)) fetches that JSON and renders it on Android and iOS with **native Compose** — `JetForgeScreen` / `JetForgeComponent` never use a WebView.
 
 ## Architecture
 
@@ -10,39 +8,36 @@ This repo ships a working slice of that loop: designer → document → server �
 ┌──────────────────────┐     JSON ScreenDocument      ┌─────────────────────┐
 │  Compose Studio      │  ─────────────────────────▶  │  Publish API        │
 │  Next.js designer    │     POST /api/screens        │  /api/screens/:id   │
-│  drag / bind / motion│                              └──────────┬──────────┘
-└──────────┬───────────┘                                         │
+│  design / prototype  │                              └──────────┬──────────┘
+└──────────────────────┘                                         │
            │ same schema                                         │ GET document
            ▼                                                     ▼
 ┌──────────────────────┐                              ┌─────────────────────┐
-│  Web device runtime  │                              │  KMP runtime         │
+│  Web device runtime  │                              │  jetforge-kmp        │
 │  /device/:id         │                              │  JetForgeScreen()    │
-│  (preview on phone)  │                              │  Android + iOS       │
+│  (preview on phone)  │                              │  native Compose      │
 └──────────────────────┘                              └──────────┬──────────┘
                                                                  │
-                                                      REST data sources
+                                                      configured request
+                                                      (headers, query, body)
                                                                  ▼
                                                       Your product APIs
 ```
 
-The important idea: **the designer does not generate Kotlin source for each screen.** It produces a versioned UI document. One Compose interpreter on the device is enough for every published screen.
+The designer does **not** generate Kotlin per screen. It produces a versioned UI document. One Compose interpreter on the device is enough for every published screen.
 
-| Layer | Role |
-| --- | --- |
-| **Screen document** | Tree of Material nodes, modifiers, enter animations, data sources, and binding paths |
-| **Designer** | Drag-and-drop editor with a Material 3 phone preview |
-| **Publish server** | Stores documents; Android and the web runtime both fetch them |
-| **Binding engine** | Resolves dotted JSON paths (`catalog.products`, `item.title`) |
-| **Compose runtime** | Maps each node type to `material3` composables (`Scaffold`, `TopAppBar`, `LazyColumn`, …) |
+The KMP interpreter lives in **its own repository**: [bhargavcode/jetforge-kmp](https://github.com/bhargavcode/jetforge-kmp). Keep that clone next to this studio; do not vendor it back into this tree.
 
-## What you can do in this slice
+## What you can do
 
 - Design Material 3 screens, including **multiple routes** (Headlines → Article → Search)
-- Click **actions** on the canvas: navigate, back, submit form, retry a failed API, open URL
-- Form **validation** (required, min length, error copy) stored on the TextField
-- **Loading / error / empty / invalid** UI painted on the same canvas via `visibleWhen`
-- Bind lists and text to a live **US news** feed (`/api/news/us`)
-- Press **Play** to execute the published behavior on the phone, then **Publish** to the device runtime
+- **Prototype board** — see every screen, drag artboards, and wire a view click (or swipe / long-press / double-tap) to another screen
+- **Touch events** on any node: tap, doubleTap, longPress, swipeLeft / swipeRight / swipeUp / swipeDown
+- Upload **image and icon placeholders** from this device; bind `item.image` (or any API path) so the live response replaces the placeholder
+- Configure the screen **request**: HTTP method, header key-value pairs, query, JSON body, form-urlencoded, or multipart. Values accept `{{forms.search.query}}` and `{{route.*}}`
+- Form **validation** (required, min length) stored on the TextField
+- **Loading / error / empty / invalid** UI via `visibleWhen`
+- Press **Play** on the phone, then **Publish** for `/device/:id` and native apps
 
 ## Run locally
 
@@ -54,38 +49,30 @@ npm run dev
 Open [http://localhost:43145](http://localhost:43145).
 
 1. The sample app is **US Briefing**. Switch screens in the left **Screens** list.
-2. Use **Canvas: error / loading / empty / invalid** to design those states without leaving the phone.
-3. Press **Play**. Search with fewer than 3 letters to see validation; tap a story to open Article; turn on **Simulate API failure** on the news source and Retry.
-4. **Publish**, then open `/device/us-briefing`.
+2. Use **Design** to edit the current phone. Use **Prototype** to see all screens and connect hotspots.
+3. Select an Image and **Upload from device** for placeholder art. Bind Image URL to `item.image` so the API replaces it.
+4. Open **Request** to edit headers, query, and body for the APIs the designed screen will call.
+5. Press **Play**. Search with fewer than 3 letters to see validation; tap a story to open Article.
+6. **Publish**, then open `/device/us-briefing`.
 
-The news proxy tries a public US headlines feed, then The Guardian `api-key=test`. If both remotes fail it still returns bundled US sample stories so the list stays usable. Turn on **Simulate API failure** on a data source to design the error / Retry UI.
+The news proxy tries a public US headlines feed, then The Guardian `api-key=test`. If both remotes fail it still returns bundled US sample stories. Turn on **Simulate API failure** on a data source to design the error / Retry UI.
 
-Android emulator:
+## Native Android / iOS
 
-```kotlin
-val baseUrl = "http://10.0.2.2:43145"
-val screen = ScreenClient.fetchScreen(baseUrl, "us-briefing")
-StudioScreen(screen, data)
-```
-
-Copy `kmp/jetforge` into an Android Studio / KMP project. Enable Compose Multiplatform and kotlinx.serialization. Use `http://<lan-ip>:43145` on a physical device.
+Clone and open [jetforge-kmp](https://github.com/bhargavcode/jetforge-kmp). Point it at this studio:
 
 ```kotlin
-JetForge.configure(JetForgeConfig(baseUrl = "http://10.0.2.2:43145"))
+JetForge.configure(JetForgeConfig(baseUrl = "http://10.0.2.2:43145")) // Android emulator
 
-// Traditional screen
-@Composable
-fun Home() { /* your UI */ }
-
-// Server-driven screen — pass the published endpoint
 @Composable
 fun Briefing() {
-    JetForgeScreen(endpoint = "us-briefing")
+    JetForgeScreen(endpoint = "us-briefing") // native Compose, not a WebView
 }
 
-// Embed inside a screen you already own
 JetForgeComponent(endpoint = "us-briefing", modifier = Modifier.height(240.dp))
 ```
+
+On iOS simulator / desktop use `http://127.0.0.1:43145`. Physical devices need your LAN IP and cleartext HTTP allowed for local studios.
 
 ## Document contract
 
@@ -93,7 +80,7 @@ JetForgeComponent(endpoint = "us-briefing", modifier = Modifier.height(240.dp))
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "us-briefing",
   "startScreenId": "headlines",
   "screens": [
@@ -101,43 +88,32 @@ JetForgeComponent(endpoint = "us-briefing", modifier = Modifier.height(240.dp))
       "id": "headlines",
       "route": "/headlines",
       "dataSourceIds": ["news"],
-      "emptyPath": "news.articles"
+      "emptyPath": "news.articles",
+      "flowX": 48,
+      "flowY": 48
     }
   ],
   "dataSources": [
-    { "id": "news", "url": "/api/news/us", "method": "GET", "fallbackToMock": false }
+    {
+      "id": "news",
+      "url": "/api/news/us",
+      "method": "GET",
+      "headerRows": [{ "key": "Accept", "value": "application/json" }],
+      "queryRows": [{ "key": "q", "value": "{{forms.search.query}}" }],
+      "bodyMode": "none"
+    }
   ]
 }
 ```
 
-Nodes may include `onClick` (`navigate`, `back`, `submitForm`, `retry`, `openUrl`), `formField` validation, and `visibleWhen` (`ready`, `loading`, `error`, `empty`, `invalid`). List rows bind with `item.*`; the article screen reads `route.article`.
-
-Binding rules:
-
-- Data source id is the root (`catalog.storeName`).
-- Inside a node with `itemBinding`, each array element is `item`.
-- Unresolved bindings fall back to the static prop, then to mock JSON.
-
-## How to grow this into production
-
-The slice is intentionally one vertical path. A production system would add:
-
-1. **Auth and environments** — draft vs published, per-app keys, staging URLs
-2. **Expressions** — enablement, formatting (`formatCurrency(item.price)`)
-3. **Shared-element / navigation transitions** between published screens
-4. **Component library versioning** — designer and APK must agree on `schemaVersion`
-5. **Hot reload on device** — websocket push after publish
-6. **Design tokens** from your brand (Material dynamic color / HCT)
-7. **Offline cache** of last published document + last API payload
-
-Do not generate a new APK for every screen. Keep the interpreter in the app, and treat published JSON as configuration.
+Nodes may include `interactions` (`tap`, `doubleTap`, `longPress`, `swipeLeft`, `swipeRight`, `swipeUp`, `swipeDown`) mapped to `navigate`, `back`, `submitForm`, `retry`, `openUrl`, or `callApi`. `onClick` is still accepted as a tap action. List rows bind with `item.*`; the article screen reads `route.article`. Image `props.url` is the placeholder; `bindings.url` is the API field that replaces it.
 
 ## Project layout
 
-- `src/components/designer` — drag-and-drop editor
+- `src/components/designer` — drag-and-drop editor, Prototype board, request inspector
 - `src/components/preview` — Material 3 phone renderer (shared with `/device`)
-- `src/lib/schema.ts` — the document types
+- `src/lib/schema.ts` — the document types (schema version 3)
 - `src/app/api/screens` — publish / fetch
-- `kmp/jetforge` — Kotlin Multiplatform interpreter (`JetForgeScreen`, `JetForgeComponent`) for Android + iOS
-- `kmp/sample` — mixed app: traditional Home/Settings + live published Briefing
-- `android/composestudio-runtime` — earlier Android-only snapshot (prefer `kmp/`)
+- `src/app/api/bind` — execute configured requests and return JSON for binding
+- `src/app/api/assets` — device uploads for image/icon placeholders
+- `android/` — earlier Android-only snapshot (prefer [jetforge-kmp](https://github.com/bhargavcode/jetforge-kmp))

@@ -4,7 +4,17 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createNode } from "./catalog";
 import { currentRoot, currentScreen, normalizeDocument, patchScreen, replaceScreenRoot } from "./document";
-import type { CanvasState, DataSource, NodeType, ScreenDef, ScreenDocument, SlotName, UiNode } from "./schema";
+import type {
+  AssetRef,
+  CanvasState,
+  DataSource,
+  NodeType,
+  ScreenDef,
+  ScreenDocument,
+  SlotName,
+  UiNode,
+  WorkspaceMode,
+} from "./schema";
 import { createStarterScreen } from "./starter-screen";
 import { acceptsChild, findNode, findParent, insertChild, moveChild, removeNode, updateNode } from "./tree";
 
@@ -18,6 +28,7 @@ interface DesignerState {
   liveData: boolean;
   playMode: boolean;
   canvasState: CanvasState;
+  workspaceMode: WorkspaceMode;
   select: (id: string | null) => void;
   setName: (name: string) => void;
   setTheme: (theme: ScreenDocument["theme"]) => void;
@@ -35,6 +46,8 @@ interface DesignerState {
   setLiveData: (live: boolean) => void;
   setPlayMode: (play: boolean) => void;
   setCanvasState: (state: CanvasState) => void;
+  setWorkspaceMode: (mode: WorkspaceMode) => void;
+  addAsset: (asset: AssetRef) => void;
   reset: () => void;
   loadDocument: (screen: ScreenDocument) => void;
 }
@@ -55,6 +68,7 @@ export const useDesigner = create<DesignerState>()(
       liveData: true,
       playMode: false,
       canvasState: "auto",
+      workspaceMode: "design",
       select: (id) => set({ selectedId: id }),
       setName: (name) => set({ screen: { ...get().screen, name } }),
       setTheme: (theme) => set({ screen: { ...get().screen, theme } }),
@@ -65,12 +79,15 @@ export const useDesigner = create<DesignerState>()(
       addScreen: () => {
         const id = `screen_${Math.random().toString(36).slice(2, 6)}`;
         const scaffold = createNode("Scaffold");
+        const index = get().screen.screens.length;
         const def: ScreenDef = {
           id,
           name: "New screen",
           route: `/${id}`,
           root: scaffold,
           dataSourceIds: [],
+          flowX: 48 + (index % 3) * 280,
+          flowY: 48 + Math.floor(index / 3) * 220,
         };
         set({
           screen: { ...get().screen, screens: [...get().screen.screens, def] },
@@ -129,6 +146,10 @@ export const useDesigner = create<DesignerState>()(
           name: "New API",
           url: "/api/news/us",
           method: "GET",
+          headerRows: [],
+          queryRows: [],
+          formRows: [],
+          bodyMode: "none",
           fallbackToMock: false,
           mock: { articles: [] },
         };
@@ -180,8 +201,14 @@ export const useDesigner = create<DesignerState>()(
         }
       },
       setLiveData: (live) => set({ liveData: live }),
-      setPlayMode: (play) => set({ playMode: play }),
+      setPlayMode: (play) => set({ playMode: play, workspaceMode: play ? "design" : get().workspaceMode }),
       setCanvasState: (canvasState) => set({ canvasState }),
+      setWorkspaceMode: (workspaceMode) => set({ workspaceMode, playMode: false }),
+      addAsset: (asset) => {
+        const screen = get().screen;
+        const assets = [asset, ...(screen.assets ?? []).filter((item) => item.id !== asset.id)];
+        set({ screen: { ...screen, assets } });
+      },
       reset: () => {
         const next = createStarterScreen();
         set({
@@ -206,7 +233,7 @@ export const useDesigner = create<DesignerState>()(
       },
     }),
     {
-      name: "compose-studio-draft-v3",
+      name: "compose-studio-draft-v4",
       partialize: (state) => ({
         screen: state.screen,
         currentScreenId: state.currentScreenId,

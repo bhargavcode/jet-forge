@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 2 as const;
+export const SCHEMA_VERSION = 3 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -74,7 +74,22 @@ export type VisibleWhen = "always" | "loading" | "error" | "ready" | "empty" | "
 
 export type CanvasState = "auto" | VisibleWhen;
 
+export type WorkspaceMode = "design" | "prototype";
+
 export type ActionType = "none" | "navigate" | "back" | "submitForm" | "retry" | "openUrl" | "callApi";
+
+export type TouchEvent =
+  | "tap"
+  | "doubleTap"
+  | "longPress"
+  | "swipeLeft"
+  | "swipeRight"
+  | "swipeUp"
+  | "swipeDown";
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export type BodyMode = "none" | "json" | "form" | "multipart";
 
 export interface PaddingSpec {
   all?: number;
@@ -110,6 +125,16 @@ export interface ClickAction {
   dataSourceId?: string;
 }
 
+export interface Interaction {
+  event: TouchEvent;
+  action: ClickAction;
+}
+
+export interface KeyValue {
+  key: string;
+  value: string;
+}
+
 export interface ValidationRule {
   required?: boolean;
   minLength?: number;
@@ -134,7 +159,9 @@ export interface UiNode {
   children?: UiNode[];
   slot?: SlotName;
   itemBinding?: string;
+  /** Prefer `interactions` with event `tap`. Kept so published v2 documents still run. */
   onClick?: ClickAction;
+  interactions?: Interaction[];
   formField?: FormFieldSpec;
   visibleWhen?: VisibleWhen;
 }
@@ -143,13 +170,24 @@ export interface DataSource {
   id: string;
   name: string;
   url: string;
-  method: "GET" | "POST";
+  method: HttpMethod;
   headers?: Record<string, string>;
+  headerRows?: KeyValue[];
+  queryRows?: KeyValue[];
+  bodyMode?: BodyMode;
   body?: string;
+  formRows?: KeyValue[];
   mock?: unknown;
-  /** When false, a failed fetch surfaces the canvas error state instead of silent mock data. */
   fallbackToMock?: boolean;
   simulateFailure?: boolean;
+}
+
+export interface AssetRef {
+  id: string;
+  name: string;
+  kind: "image" | "icon";
+  mime: string;
+  url: string;
 }
 
 export interface ScreenDef {
@@ -159,6 +197,8 @@ export interface ScreenDef {
   root: UiNode;
   dataSourceIds?: string[];
   emptyPath?: string;
+  flowX?: number;
+  flowY?: number;
 }
 
 export interface ScreenTheme {
@@ -175,6 +215,7 @@ export interface ScreenDocument {
   screens: ScreenDef[];
   startScreenId: string;
   root: UiNode;
+  assets?: AssetRef[];
   publishedAt?: string;
 }
 
@@ -185,3 +226,13 @@ export interface PublishedScreenSummary {
 }
 
 export const NONE_ACTION: ClickAction = { type: "none" };
+
+export const TOUCH_EVENTS: TouchEvent[] = [
+  "tap",
+  "doubleTap",
+  "longPress",
+  "swipeLeft",
+  "swipeRight",
+  "swipeUp",
+  "swipeDown",
+];

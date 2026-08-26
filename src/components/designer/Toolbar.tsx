@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { SEED_OPTIONS } from "@/lib/theme";
 import { useDesigner } from "@/lib/store";
-import type { CanvasState } from "@/lib/schema";
+import type { CanvasState, WorkspaceMode } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 export function Toolbar() {
@@ -32,6 +32,8 @@ export function Toolbar() {
   const setPlayMode = useDesigner((s) => s.setPlayMode);
   const canvasState = useDesigner((s) => s.canvasState);
   const setCanvasState = useDesigner((s) => s.setCanvasState);
+  const workspaceMode = useDesigner((s) => s.workspaceMode);
+  const setWorkspaceMode = useDesigner((s) => s.setWorkspaceMode);
   const [publishing, setPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
 
@@ -103,7 +105,22 @@ export function Toolbar() {
         {screen.theme.mode === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
         {screen.theme.mode}
       </Button>
-      <label className="ml-auto flex items-center gap-2 text-sm">
+      <div className="ml-auto flex rounded-lg border p-0.5">
+        {(["design", "prototype"] as WorkspaceMode[]).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setWorkspaceMode(mode)}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-medium capitalize",
+              workspaceMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+            )}
+          >
+            {mode === "design" ? "Design" : "Prototype"}
+          </button>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-sm">
         <Switch checked={liveData} onCheckedChange={setLiveData} />
         Live API
       </label>
@@ -156,27 +173,28 @@ function HowItWorks() {
       </DialogTrigger>
       <DialogContent className="max-w-lg sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Design → publish → Android</DialogTitle>
+          <DialogTitle>Design → prototype → native devices</DialogTitle>
           <DialogDescription>
-            One JSON document drives the designer preview and the Jetpack Compose runtime.
+            One JSON document drives the designer, the web phone, and native Compose on Android and iOS.
+            JetForgeScreen never uses a WebView.
           </DialogDescription>
         </DialogHeader>
         <ol className="space-y-3 text-sm leading-6">
           <li>
-            <strong>1. Design.</strong> Drag Material 3 components onto the phone. Scaffold maps to
-            topBar, content, bottomBar, and FAB — the same slots Compose uses.
+            <strong>1. Design.</strong> Place Material 3 components on the phone the way you would frames
+            in Figma. Upload image/icon placeholders from this device; bind them so API fields replace the art.
           </li>
           <li>
-            <strong>2. Bind and validate.</strong> REST sources, form rules, and{" "}
-            <code>visibleWhen</code> (loading / error / empty / invalid) are designed on the same canvas.
+            <strong>2. Request.</strong> Each screen can fire a configured API: method, header key-values,
+            query, JSON or form body, with <code>{"{{forms.*}}"}</code> interpolation.
           </li>
           <li>
-            <strong>3. Actions.</strong> Clicks navigate to another screen, submit a form, retry a failed
-            API, or open a URL. Press Play to run those routes on the phone.
+            <strong>3. Prototype.</strong> Open the Prototype board to see every screen and route. Drag a
+            hotspot onto another artboard to wire tap, or set double-tap / long-press / swipe in Touch.
           </li>
           <li>
-            <strong>4. Publish.</strong> Android fetches the document, calls the same US news APIs, and
-            executes the same actions.
+            <strong>4. Publish.</strong> Native JetForgeScreen fetches the document, calls the same request,
+            and binds the JSON onto the designed tree.
           </li>
         </ol>
       </DialogContent>

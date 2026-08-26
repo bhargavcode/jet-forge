@@ -45,6 +45,7 @@ export function updateNode(root: UiNode, id: string, patch: Partial<UiNode>): Ui
           ? node.bindings
           : { ...node.bindings, ...patch.bindings },
       onClick: patch.onClick !== undefined ? patch.onClick : node.onClick,
+      interactions: patch.interactions !== undefined ? patch.interactions : node.interactions,
       formField:
         patch.formField === undefined
           ? node.formField

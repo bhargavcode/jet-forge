@@ -3,10 +3,24 @@
 import type { ReactNode } from "react";
 import { BINDABLE_PROPS } from "@/lib/catalog";
 import { flattenSources } from "@/lib/bindings";
-import type { ActionType, ColorToken, EnterAnimationType, IconName, TextStyle, UiNode, VisibleWhen } from "@/lib/schema";
+import type {
+  ActionType,
+  ColorToken,
+  EnterAnimationType,
+  IconName,
+  Interaction,
+  TextStyle,
+  TouchEvent,
+  UiNode,
+  VisibleWhen,
+} from "@/lib/schema";
+import { TOUCH_EVENTS } from "@/lib/schema";
+import { interactionsOf } from "@/lib/interactions";
+import { AssetUpload } from "./AssetUpload";
 import { useDesigner } from "@/lib/store";
 import { currentRoot } from "@/lib/document";
 import { findNode } from "@/lib/tree";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -91,7 +105,7 @@ export function Inspector() {
   if (!node) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        Select a component to edit Material props, API bindings, click routes, form validation, and enter motion.
+        Select a component to edit Material props, API bindings, touch routes, form validation, and enter motion.
       </div>
     );
   }
@@ -125,7 +139,7 @@ export function Inspector() {
             Bind
           </TabsTrigger>
           <TabsTrigger value="action" className="flex-1">
-            Action
+            Touch
           </TabsTrigger>
           <TabsTrigger value="motion" className="flex-1">
             Motion
@@ -182,102 +196,50 @@ export function Inspector() {
           </Field>
         </TabsContent>
         <TabsContent value="action" className="space-y-4 p-3">
-          <Field label="On click">
-            <Select
-              value={node.onClick?.type ?? "none"}
-              onValueChange={(value) => {
-                if (!value) return;
-                patchNode(node.id, {
-                  onClick: {
-                    type: value as ActionType,
-                    screenId: node.onClick?.screenId,
-                    formId: node.onClick?.formId,
-                    url: node.onClick?.url,
-                    params: node.onClick?.params,
-                    dataSourceId: node.onClick?.dataSourceId,
-                  },
-                });
+          <p className="text-xs leading-5 text-muted-foreground">
+            Wire gestures to screens the way Figma prototypes do. Tap, double-tap, long-press, and swipes publish into the native runtime.
+          </p>
+          {interactionsOf(node).map((item, index) => (
+            <InteractionEditor
+              key={`${item.event}-${index}`}
+              item={item}
+              screens={screen.screens}
+              dataSources={screen.dataSources}
+              onChange={(nextItem) => {
+                const list = [...interactionsOf(node)];
+                list[index] = nextItem;
+                const tap = list.find((row) => row.event === "tap")?.action;
+                patchNode(node.id, { interactions: list, onClick: tap ?? { type: "none" } });
               }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTIONS.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          {node.onClick?.type === "navigate" || node.onClick?.type === "submitForm" ? (
-            <Field label="Open screen">
-              <Select
-                value={node.onClick.screenId ?? ""}
-                onValueChange={(value) =>
-                  value &&
-                  patchNode(node.id, { onClick: { ...node.onClick!, screenId: value } })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a route" />
-                </SelectTrigger>
-                <SelectContent>
-                  {screen.screens.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name} ({item.route})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : null}
-          {node.onClick?.type === "navigate" ? (
-            <Field label="Pass item as route.article">
-              <Input
-                placeholder="item"
-                value={node.onClick.params?.article ?? ""}
-                onChange={(e) =>
-                  patchNode(node.id, {
-                    onClick: {
-                      ...node.onClick!,
-                      params: { ...(node.onClick?.params ?? {}), article: e.target.value },
-                    },
-                  })
-                }
-              />
-            </Field>
-          ) : null}
-          {node.onClick?.type === "openUrl" ? (
-            <Field label="URL">
-              <Input
-                placeholder="{{route.article.url}}"
-                value={node.onClick.url ?? ""}
-                onChange={(e) => patchNode(node.id, { onClick: { ...node.onClick!, url: e.target.value } })}
-              />
-            </Field>
-          ) : null}
-          {node.onClick?.type === "submitForm" || node.type === "TextField" ? (
-            <Field label="Form id">
-              <Input
-                value={node.onClick?.formId ?? node.formField?.formId ?? ""}
-                onChange={(e) => {
-                  const formId = e.target.value;
-                  patchNode(node.id, {
-                    onClick: node.onClick ? { ...node.onClick, formId } : node.onClick,
-                    formField: node.formField
-                      ? { ...node.formField, formId }
-                      : node.type === "TextField"
-                        ? { formId, name: "query" }
-                        : node.formField,
-                  });
-                }}
-              />
-            </Field>
-          ) : null}
+              onRemove={() => {
+                const list = interactionsOf(node).filter((_, i) => i !== index);
+                const tap = list.find((row) => row.event === "tap")?.action;
+                patchNode(node.id, { interactions: list, onClick: tap ?? { type: "none" } });
+              }}
+            />
+          ))}
+          <button
+            type="button"
+            className="text-xs font-medium text-primary"
+            onClick={() => {
+              const list: Interaction[] = [...interactionsOf(node), { event: "tap", action: { type: "none" } }];
+              patchNode(node.id, { interactions: list });
+            }}
+          >
+            + Add gesture
+          </button>
           {node.type === "TextField" ? (
             <>
+              <Field label="Form id">
+                <Input
+                  value={node.formField?.formId ?? ""}
+                  onChange={(e) =>
+                    patchNode(node.id, {
+                      formField: node.formField ? { ...node.formField, formId: e.target.value } : { formId: e.target.value, name: "query" },
+                    })
+                  }
+                />
+              </Field>
               <Field label="Field name">
                 <Input
                   value={node.formField?.name ?? ""}
@@ -329,49 +291,8 @@ export function Inspector() {
                   }
                 />
               </Field>
-              <Field label="Error message">
-                <Input
-                  value={node.formField?.validation?.message ?? ""}
-                  onChange={(e) =>
-                    patchNode(node.id, {
-                      formField: {
-                        formId: node.formField?.formId || "search",
-                        name: node.formField?.name || "query",
-                        validation: {
-                          ...node.formField?.validation,
-                          message: e.target.value,
-                        },
-                      },
-                    })
-                  }
-                />
-              </Field>
             </>
           ) : null}
-          {node.onClick?.type === "retry" || node.onClick?.type === "callApi" ? (
-            <Field label="Data source id">
-              <Select
-                value={node.onClick.dataSourceId ?? ""}
-                onValueChange={(value) =>
-                  value && patchNode(node.id, { onClick: { ...node.onClick!, dataSourceId: value } })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {screen.dataSources.map((source) => (
-                    <SelectItem key={source.id} value={source.id}>
-                      {source.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : null}
-          <p className="text-xs leading-5 text-muted-foreground">
-            Routes, validation, and error UI are part of the published document. Play the canvas to click through screens the same way the Android runtime will.
-          </p>
         </TabsContent>
         <TabsContent value="bind" className="space-y-4 p-3">
           {bindable.length === 0 ? (
@@ -645,6 +566,15 @@ function TypeFields({
             />
           </Field>
         ) : null}
+        {node.type === "Icon" ? (
+          <Field label="Custom icon from device">
+            <AssetUpload
+              kind="icon"
+              currentUrl={String(node.props.url ?? "")}
+              onPicked={(url) => setProp("url", url)}
+            />
+          </Field>
+        ) : null}
       </>
     );
   }
@@ -681,9 +611,17 @@ function TypeFields({
 
   if (node.type === "Image") {
     return (
-      <Field label="Image URL">
-        <Input value={String(node.props.url ?? "")} onChange={(e) => setProp("url", e.target.value)} />
-      </Field>
+      <>
+        <Field label="Placeholder (device upload)">
+          <AssetUpload kind="image" currentUrl={String(node.props.url ?? "")} onPicked={(url) => setProp("url", url)} />
+        </Field>
+        <Field label="Placeholder URL">
+          <Input value={String(node.props.url ?? "")} onChange={(e) => setProp("url", e.target.value)} />
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          This file is the empty-state art. Bind Image URL to an API field (item.image) and the live response replaces it.
+        </p>
+      </>
     );
   }
 
@@ -691,5 +629,121 @@ function TypeFields({
     <p className="text-sm text-muted-foreground">
       Layout containers expose padding, list binding, and children. Drop Material components into this node on the canvas.
     </p>
+  );
+}
+
+
+function InteractionEditor({
+  item,
+  screens,
+  dataSources,
+  onChange,
+  onRemove,
+}: {
+  item: Interaction;
+  screens: { id: string; name: string; route: string }[];
+  dataSources: { id: string }[];
+  onChange: (item: Interaction) => void;
+  onRemove: () => void;
+}) {
+  const action = item.action;
+  return (
+    <div className="space-y-2 rounded-lg border p-2">
+      <div className="flex gap-2">
+        <Select
+          value={item.event}
+          onValueChange={(value) => value && onChange({ ...item, event: value as TouchEvent })}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TOUCH_EVENTS.map((event) => (
+              <SelectItem key={event} value={event}>
+                {event}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={action.type}
+          onValueChange={(value) => value && onChange({ ...item, action: { ...action, type: value as ActionType } })}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACTIONS.map((type) => (
+              <SelectItem key={type} value={type}>
+                {type}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="icon-sm" variant="ghost" onClick={onRemove}>
+          ×
+        </Button>
+      </div>
+      {action.type === "navigate" || action.type === "submitForm" ? (
+        <Select
+          value={action.screenId ?? ""}
+          onValueChange={(value) => value && onChange({ ...item, action: { ...action, screenId: value } })}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue placeholder="Open screen" />
+          </SelectTrigger>
+          <SelectContent>
+            {screens.map((screen) => (
+              <SelectItem key={screen.id} value={screen.id}>
+                {screen.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+      {action.type === "navigate" ? (
+        <Input
+          className="h-8"
+          placeholder="Pass item as route.article"
+          value={action.params?.article ?? ""}
+          onChange={(e) =>
+            onChange({ ...item, action: { ...action, params: { ...(action.params ?? {}), article: e.target.value } } })
+          }
+        />
+      ) : null}
+      {action.type === "openUrl" ? (
+        <Input
+          className="h-8"
+          placeholder="{{route.article.url}}"
+          value={action.url ?? ""}
+          onChange={(e) => onChange({ ...item, action: { ...action, url: e.target.value } })}
+        />
+      ) : null}
+      {action.type === "submitForm" ? (
+        <Input
+          className="h-8"
+          placeholder="form id"
+          value={action.formId ?? ""}
+          onChange={(e) => onChange({ ...item, action: { ...action, formId: e.target.value } })}
+        />
+      ) : null}
+      {action.type === "retry" || action.type === "callApi" ? (
+        <Select
+          value={action.dataSourceId ?? ""}
+          onValueChange={(value) => value && onChange({ ...item, action: { ...action, dataSourceId: value } })}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue placeholder="API id" />
+          </SelectTrigger>
+          <SelectContent>
+            {dataSources.map((source) => (
+              <SelectItem key={source.id} value={source.id}>
+                {source.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+    </div>
   );
 }
