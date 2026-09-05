@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,42 +34,36 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
   const selectedId = useDesigner((s) => s.selectedId);
   const select = useDesigner((s) => s.select);
   const selected = selectedId === node.id;
-  const drag = useDraggable({
+  const locked = node.type === "Scaffold";
+  const sortable = useSortable({
     id: `layer-${node.id}`,
-    data: { source: "layers", nodeId: node.id, type: node.type },
-    disabled: node.type === "Scaffold",
-  });
-  const drop = useDroppable({
-    id: `layer-drop-${node.id}`,
-    data: {
-      kind: "reorder",
-      targetId: node.id,
-      nodeId: node.id,
-    },
+    data: { source: "layers", nodeId: node.id, type: node.type, kind: "reorder", targetId: node.id },
+    disabled: locked,
   });
 
   return (
     <>
       <div
-        ref={(el) => {
-          drag.setNodeRef(el);
-          drop.setNodeRef(el);
-        }}
-        {...(node.type !== "Scaffold" ? isolateDragListeners(drag.listeners) : {})}
-        {...(node.type !== "Scaffold" ? drag.attributes : {})}
+        ref={sortable.setNodeRef}
+        {...(!locked ? isolateDragListeners(sortable.listeners) : {})}
+        {...(!locked ? sortable.attributes : {})}
         onClick={() => select(node.id)}
         className={cn(
           "flex w-full cursor-grab items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted",
           selected && "bg-primary/10 text-primary",
-          drop.isOver && "m3-drop-over",
-          drag.isDragging && "opacity-40",
-          node.type === "Scaffold" && "cursor-default",
+          sortable.isOver && "m3-drop-over",
+          sortable.isDragging && "opacity-40",
+          locked && "cursor-default",
         )}
-        style={{ paddingLeft: 8 + depth * 12 }}
+        style={{
+          paddingLeft: 8 + depth * 12,
+          transform: CSS.Transform.toString(sortable.transform),
+          transition: sortable.transition,
+        }}
         role="button"
         tabIndex={0}
       >
-        {node.type !== "Scaffold" ? (
+        {!locked ? (
           <GripVertical className="mr-1 size-3.5 shrink-0 text-muted-foreground" />
         ) : (
           <span className="mr-1 w-3.5 shrink-0" />
@@ -78,9 +73,13 @@ function LayerRow({ node, depth }: { node: UiNode; depth: number }) {
           {layerBadge(node)}
         </span>
       </div>
-      {node.children?.map((child) => (
-        <LayerRow key={child.id} node={child} depth={depth + 1} />
-      ))}
+      {node.children?.length ? (
+        <SortableContext items={node.children.map((child) => `layer-${child.id}`)} strategy={verticalListSortingStrategy}>
+          {node.children.map((child) => (
+            <LayerRow key={child.id} node={child} depth={depth + 1} />
+          ))}
+        </SortableContext>
+      ) : null}
     </>
   );
 }

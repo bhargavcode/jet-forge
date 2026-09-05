@@ -32,6 +32,7 @@ import { useDesigner } from "@/lib/store";
 import { CATALOG } from "@/lib/catalog";
 import { currentRoot } from "@/lib/document";
 import { acceptsChild, findNode, findParent, hostIdFromVirtual, isContainer, isVirtualNodeId } from "@/lib/tree";
+import { nodeIdFromOver } from "@/lib/drop";
 import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
 
@@ -50,10 +51,16 @@ const collisionDetection: CollisionDetection = (args) => {
     collisions.filter((collision) => {
       const id = String(collision.id);
       if (id.startsWith("palette-") || id.startsWith("canvas-")) return false;
-      if (fromLayers && !id.startsWith("layer-drop-")) return false;
-      if (!fromLayers && id.startsWith("layer-drop-")) return false;
+      if (fromLayers && !id.startsWith("layer-")) return false;
+      if (!fromLayers && (id.startsWith("layer-drop-") || id.startsWith("layer-"))) return false;
       const data = droppableData(collision);
-      if (activeNodeId && (data?.nodeId === activeNodeId || id === `node-${activeNodeId}` || id === `layer-drop-${activeNodeId}`)) {
+      if (
+        activeNodeId &&
+        (data?.nodeId === activeNodeId ||
+          id === `node-${activeNodeId}` ||
+          id === `layer-${activeNodeId}` ||
+          id === `layer-drop-${activeNodeId}`)
+      ) {
         return false;
       }
       return true;
@@ -132,11 +139,12 @@ export function Designer() {
       | undefined;
     const over = event.over;
     if (!over) return;
-    let targetId = String(over.data.current?.targetId ?? over.id ?? "");
+    let targetId = nodeIdFromOver(over.id, over.data.current as { targetId?: string; nodeId?: string } | undefined);
     if (isVirtualNodeId(targetId)) {
       targetId = `${hostIdFromVirtual(targetId)}::content`;
     }
-    if (!targetId || targetId.startsWith("palette-") || (String(over.id).startsWith("layer-") && !over.data.current)) return;
+    if (!targetId || targetId.startsWith("palette-")) return;
+    const kind = (over.data.current?.kind as string | undefined) ?? (data?.source === "layers" ? "reorder" : undefined);
 
     let parentId = targetId;
     let slot: SlotName | undefined;
@@ -146,7 +154,6 @@ export function Designer() {
       slot = slotName;
     }
 
-    const kind = over.data.current?.kind as string | undefined;
     const after = dropAfter(event);
 
     if ((data?.source === "canvas" || data?.source === "layers") && data.nodeId) {

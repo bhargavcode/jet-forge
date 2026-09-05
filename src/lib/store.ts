@@ -283,7 +283,9 @@ export const useDesigner = create<DesignerState>()(
           const { selectedId, screen, currentScreenId } = get();
           if (!selectedId) return;
           const root = currentRoot(screen, currentScreenId);
-          set({ ...historyPatch(), screen: withRoot(screen, currentScreenId, moveChild(root, selectedId, direction)) });
+          const next = moveChild(root, selectedId, direction);
+          if (next === root) return;
+          set({ ...historyPatch(), screen: withRoot(screen, currentScreenId, next) });
         },
         relocateNode: (nodeId, parentId, index) => {
           const { screen, currentScreenId } = get();
