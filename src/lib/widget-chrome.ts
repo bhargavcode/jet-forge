@@ -3,26 +3,50 @@ import type { ColorToken, NodeType, TextStyle, UiNode } from "./schema";
 export const LABEL_TYPES: NodeType[] = [
   "Text",
   "FilledButton",
+  "TonalButton",
+  "ElevatedButton",
   "OutlinedButton",
   "TextButton",
   "Chip",
   "TextField",
   "Switch",
   "Checkbox",
+  "Slider",
+  "RadioButton",
   "TopAppBar",
   "ListItem",
+  "SearchBar",
+  "Snackbar",
+  "Dialog",
+  "Tab",
+  "DropdownMenuItem",
+  "SegmentedButtonItem",
 ];
 
-export const BUTTON_TYPES: NodeType[] = ["FilledButton", "OutlinedButton", "TextButton", "Chip"];
-
-export const SURFACE_TYPES: NodeType[] = [
+export const BUTTON_TYPES: NodeType[] = [
   "FilledButton",
+  "TonalButton",
+  "ElevatedButton",
   "OutlinedButton",
   "TextButton",
   "Chip",
+];
+
+export const SURFACE_TYPES: NodeType[] = [
+  "FilledButton",
+  "TonalButton",
+  "ElevatedButton",
+  "OutlinedButton",
+  "TextButton",
+  "Chip",
+  "IconButton",
   "Card",
+  "Surface",
   "FAB",
   "TextField",
+  "SearchBar",
+  "BottomSheet",
+  "Dialog",
 ];
 
 export function isLabelType(type: NodeType) {
@@ -47,9 +71,11 @@ export function hasCustomSurface(node: UiNode) {
 
 export function defaultTextToken(type: NodeType): ColorToken {
   if (type === "FilledButton") return "onPrimary";
-  if (type === "OutlinedButton" || type === "TextButton") return "primary";
+  if (type === "TonalButton") return "onSecondaryContainer";
+  if (type === "OutlinedButton" || type === "TextButton" || type === "ElevatedButton") return "primary";
   if (type === "Chip") return "onSurface";
   if (type === "TextField") return "onSurface";
+  if (type === "SearchBar") return "onSurface";
   return "onSurface";
 }
 
@@ -57,6 +83,7 @@ export function defaultTypeScale(type: NodeType): TextStyle {
   if (isButtonType(type)) return "labelLarge";
   if (type === "TopAppBar") return "titleLarge";
   if (type === "TextField") return "bodyLarge";
+  if (type === "SearchBar") return "bodyLarge";
   return "bodyLarge";
 }
 

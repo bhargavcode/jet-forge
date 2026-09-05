@@ -5,31 +5,20 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { PhoneFrame } from "./PhoneFrame";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { collectWires, hotspotNodes, interactionsOf } from "@/lib/interactions";
+import {
+  FLOW_FRAME_W,
+  FLOW_ORIGIN_Y,
+  defaultFlowX,
+  defaultFlowY,
+  flowCanvasSize,
+  flowWireOrigin,
+  flowWireTarget,
+  needsFlowSpread,
+  spreadFlowScreens,
+} from "@/lib/flow-layout";
 import { useDesigner } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import type { Interaction, ScreenDef, UiNode } from "@/lib/schema";
-
-const FRAME_W = 188;
-const FRAME_H = 420;
-const COL_GAP = 232;
-
-function defaultX(index: number) {
-  return 56 + index * (FRAME_W + COL_GAP);
-}
-
-function needsSpread(screens: ScreenDef[]) {
-  if (screens.length < 2) return screens.some((screen) => screen.flowX == null);
-  if (screens.some((screen) => screen.flowX == null || screen.flowY == null)) return true;
-  let clustered = 0;
-  for (let i = 0; i < screens.length; i++) {
-    for (let j = i + 1; j < screens.length; j++) {
-      const dx = Math.abs((screens[i].flowX ?? 0) - (screens[j].flowX ?? 0));
-      const dy = Math.abs((screens[i].flowY ?? 0) - (screens[j].flowY ?? 0));
-      if (dx < 24 && dy < 24) clustered += 1;
-    }
-  }
-  return clustered >= screens.length - 1;
-}
+import type { Interaction, UiNode } from "@/lib/schema";
 
 export function FlowBoard() {
   const document = useDesigner((s) => s.screen);
@@ -54,29 +43,24 @@ export function FlowBoard() {
   const wires = collectWires(document);
 
   useEffect(() => {
-    if (!needsSpread(document.screens)) return;
+    if (!needsFlowSpread(document.screens)) return;
     useDesigner.setState({
       screen: {
         ...document,
-        screens: document.screens.map((screen, index) => ({
-          ...screen,
-          flowX: defaultX(index),
-          flowY: 48,
-        })),
+        screens: spreadFlowScreens(document.screens),
       },
     });
-  }, [document]);
+  }, [document.screens.length, document.screens.map((s) => `${s.id}:${s.flowX}:${s.flowY}`).join("|")]);
 
-  const canvas = useMemo(() => {
-    const maxX = Math.max(960, ...document.screens.map((screen, index) => (screen.flowX ?? defaultX(index)) + FRAME_W + 80));
-    const maxY = Math.max(640, ...document.screens.map((screen) => (screen.flowY ?? 48) + FRAME_H + 80));
-    return { width: maxX, height: maxY };
-  }, [document.screens]);
+  const canvas = useMemo(() => flowCanvasSize(document.screens), [document.screens]);
 
   function point(event: ReactPointerEvent) {
     const root = boardRef.current;
     if (!root) return { x: event.clientX, y: event.clientY };
-    return { x: event.clientX - root.getBoundingClientRect().left + root.scrollLeft, y: event.clientY - root.getBoundingClientRect().top + root.scrollTop };
+    return {
+      x: event.clientX - root.getBoundingClientRect().left + root.scrollLeft,
+      y: event.clientY - root.getBoundingClientRect().top + root.scrollTop,
+    };
   }
 
   function patchScreenById(id: string, flowX: number, flowY: number) {
@@ -84,6 +68,11 @@ export function FlowBoard() {
       screen.id === id ? { ...screen, flowX, flowY } : screen,
     );
     useDesigner.setState({ screen: { ...document, screens } });
+  }
+
+  function hotspotIndexFor(screenRoot: UiNode, nodeId: string) {
+    const index = hotspotNodes(screenRoot).findIndex((node) => node.id === nodeId);
+    return index >= 0 ? index : 0;
   }
 
   function onMove(event: ReactPointerEvent) {
@@ -149,27 +138,49 @@ export function FlowBoard() {
     >
       <div className="relative" style={{ width: canvas.width, height: canvas.height, minHeight: "100%" }}>
         <svg className="pointer-events-none absolute inset-0" width={canvas.width} height={canvas.height}>
-          {wires.map((item) => {
+          {wires.map((item, wireIndex) => {
+            if (!item.toScreenId) return null;
             const fromIndex = document.screens.findIndex((screen) => screen.id === item.fromScreenId);
             const toIndex = document.screens.findIndex((screen) => screen.id === item.toScreenId);
             const from = document.screens[fromIndex];
             const to = document.screens[toIndex];
             if (!from || !to) return null;
-            const x1 = (from.flowX ?? defaultX(fromIndex)) + FRAME_W;
-            const y1 = (from.flowY ?? 48) + 180;
-            const x2 = to.flowX ?? defaultX(toIndex);
-            const y2 = (to.flowY ?? 48) + 180;
+
+            const fromX = from.flowX ?? defaultFlowX(fromIndex);
+            const fromY = from.flowY ?? FLOW_ORIGIN_Y;
+            const toX = to.flowX ?? defaultFlowX(toIndex);
+            const toY = to.flowY ?? FLOW_ORIGIN_Y;
+
+            const hotspotIndex = hotspotIndexFor(from.root, item.fromNodeId);
+            const origin = flowWireOrigin(fromX, fromY, hotspotIndex);
+            const target = flowWireTarget(toX, toY);
+
+            const x1 = origin.x;
+            const y1 = origin.y;
+            const x2 = target.x;
+            const y2 = target.y;
             const mid = (x1 + x2) / 2;
+            const labelY = (y1 + y2) / 2 - 10 + (wireIndex % 3) * 14 - 14;
+
             return (
-              <g key={`${item.fromNodeId}-${item.event}-${item.toScreenId}`}>
+              <g key={`${item.fromScreenId}-${item.fromNodeId}-${item.event}-${item.toScreenId}-${item.toNodeId ?? ""}`}>
                 <path
                   d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`}
                   fill="none"
                   stroke="#6750A4"
                   strokeWidth="2"
                 />
+                <circle cx={x1} cy={y1} r="3" fill="#6750A4" />
                 <circle cx={x2} cy={y2} r="4" fill="#6750A4" />
-                <text x={mid} y={(y1 + y2) / 2 - 10} textAnchor="middle" fontSize="11" fill="#6750A4">
+                <rect
+                  x={mid - 52}
+                  y={labelY - 10}
+                  width={104}
+                  height={14}
+                  rx={3}
+                  fill="rgba(255,255,255,0.88)"
+                />
+                <text x={mid} y={labelY} textAnchor="middle" fontSize="10" fill="#6750A4">
                   {item.event} · {item.fromNodeType}
                 </text>
               </g>
@@ -186,9 +197,10 @@ export function FlowBoard() {
           ) : null}
         </svg>
         {document.screens.map((screen, index) => {
-          const x = screen.flowX ?? defaultX(index);
-          const y = screen.flowY ?? 48;
-          const hotspots = hotspotNodes(screen.root).slice(0, 5);
+          const x = screen.flowX ?? defaultFlowX(index);
+          const y = screen.flowY ?? defaultFlowY(index);
+          const allHotspots = hotspotNodes(screen.root);
+          const hotspots = allHotspots.slice(0, 5);
           return (
             <div
               key={screen.id}
@@ -223,68 +235,72 @@ export function FlowBoard() {
                       previewData={previewData}
                       previewErrors={previewErrors}
                     >
-                      <PhoneFrame document={document} selectedId={null} interactive={false} />
+                      <PhoneFrame document={document} selectedId={null} interactive={false} fixedDevice />
                     </RuntimeHost>
                   </div>
                 </div>
               </div>
               <div className="mt-2 space-y-1">
-                {hotspots.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    data-wire-screen={screen.id}
-                    data-wire-node={node.id}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-md bg-muted px-2 py-1 text-left text-[11px]",
-                      selectedId === node.id && "bg-primary text-primary-foreground",
-                    )}
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                      select(node.id);
-                      setCurrentScreen(screen.id);
-                      const p = point(event);
-                      setWire({
-                        fromScreenId: screen.id,
-                        fromNodeId: node.id,
-                        ox: x + FRAME_W,
-                        oy: y + 180,
-                        x: p.x,
-                        y: p.y,
-                      });
-                    }}
-                    onPointerUp={(event) => {
-                      event.stopPropagation();
-                      if (!wire || wire.fromNodeId === node.id) {
+                {hotspots.map((node) => {
+                  const hotspotIndex = allHotspots.findIndex((item) => item.id === node.id);
+                  const anchor = flowWireOrigin(x, y, hotspotIndex >= 0 ? hotspotIndex : 0);
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      data-wire-screen={screen.id}
+                      data-wire-node={node.id}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-md bg-muted px-2 py-1 text-left text-[11px]",
+                        selectedId === node.id && "bg-primary text-primary-foreground",
+                      )}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        select(node.id);
+                        setCurrentScreen(screen.id);
+                        const p = point(event);
+                        setWire({
+                          fromScreenId: screen.id,
+                          fromNodeId: node.id,
+                          ox: anchor.x,
+                          oy: anchor.y,
+                          x: p.x,
+                          y: p.y,
+                        });
+                      }}
+                      onPointerUp={(event) => {
+                        event.stopPropagation();
+                        if (!wire || wire.fromNodeId === node.id) {
+                          setWire(null);
+                          return;
+                        }
+                        const from = document.screens.find((item) => item.id === wire.fromScreenId);
+                        const fromNode = from ? findIn(from.root, wire.fromNodeId) : null;
+                        if (!from || !fromNode) {
+                          setWire(null);
+                          return;
+                        }
+                        const list = interactionsOf(fromNode).filter((item) => item.event !== "tap");
+                        const action =
+                          wire.fromScreenId === screen.id
+                            ? { type: "focusNode" as const, nodeId: node.id }
+                            : {
+                                type: "navigate" as const,
+                                screenId: screen.id,
+                                nodeId: node.id,
+                                params: fromNode.itemBinding ? { article: "item" } : undefined,
+                              };
+                        list.push({ event: "tap", action });
+                        useDesigner.getState().setCurrentScreen(from.id);
+                        useDesigner.getState().patchNode(fromNode.id, { interactions: list, onClick: action });
                         setWire(null);
-                        return;
-                      }
-                      const from = document.screens.find((item) => item.id === wire.fromScreenId);
-                      const fromNode = from ? findIn(from.root, wire.fromNodeId) : null;
-                      if (!from || !fromNode) {
-                        setWire(null);
-                        return;
-                      }
-                      const list = interactionsOf(fromNode).filter((item) => item.event !== "tap");
-                      const action =
-                        wire.fromScreenId === screen.id
-                          ? { type: "focusNode" as const, nodeId: node.id }
-                          : {
-                              type: "navigate" as const,
-                              screenId: screen.id,
-                              nodeId: node.id,
-                              params: fromNode.itemBinding ? { article: "item" } : undefined,
-                            };
-                      list.push({ event: "tap", action });
-                      useDesigner.getState().setCurrentScreen(from.id);
-                      useDesigner.getState().patchNode(fromNode.id, { interactions: list, onClick: action });
-                      setWire(null);
-                    }}
-                  >
-                    <span>{node.type}</span>
-                    <span data-handle="1" className="size-2 rounded-full bg-primary" />
-                  </button>
-                ))}
+                      }}
+                    >
+                      <span>{node.type}</span>
+                      <span data-handle="1" className="size-2 shrink-0 rounded-full bg-primary" />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -292,6 +308,17 @@ export function FlowBoard() {
         <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] text-muted-foreground">
           Drag a hotspot onto another screen or widget to wire the interaction.
         </p>
+        <button
+          type="button"
+          className="absolute top-3 right-3 rounded-lg border bg-background/95 px-2.5 py-1 text-[11px] font-medium shadow-sm hover:bg-muted"
+          onClick={() => {
+            useDesigner.setState({
+              screen: { ...document, screens: spreadFlowScreens(document.screens) },
+            });
+          }}
+        >
+          Align screens
+        </button>
       </div>
     </div>
   );

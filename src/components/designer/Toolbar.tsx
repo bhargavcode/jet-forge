@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Minus, Plus, HelpCircle, Moon, Play, Redo2, RotateCcw, Square, Sun, Undo2, Upload } from "lucide-react";
+import { Minus, Plus, HelpCircle, LayoutGrid, Magnet, Moon, Play, Redo2, RotateCcw, Square, Sun, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { SEED_OPTIONS } from "@/lib/theme";
 import { documentFingerprint, useDesigner } from "@/lib/store";
-import type { CanvasState, WorkspaceMode } from "@/lib/schema";
+import type { CanvasState, CanvasViewMode, WorkspaceMode } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 export function Toolbar() {
@@ -34,6 +34,10 @@ export function Toolbar() {
   const setCanvasState = useDesigner((s) => s.setCanvasState);
   const workspaceMode = useDesigner((s) => s.workspaceMode);
   const setWorkspaceMode = useDesigner((s) => s.setWorkspaceMode);
+  const canvasViewMode = useDesigner((s) => s.canvasViewMode);
+  const setCanvasViewMode = useDesigner((s) => s.setCanvasViewMode);
+  const snapEnabled = useDesigner((s) => s.snapEnabled);
+  const setSnapEnabled = useDesigner((s) => s.setSnapEnabled);
   const undo = useDesigner((s) => s.undo);
   const redo = useDesigner((s) => s.redo);
   const canUndo = useDesigner((s) => s.past.length > 0);
@@ -153,7 +157,36 @@ export function Toolbar() {
         Live API
       </label>
       {workspaceMode === "design" ? (
-        <select
+        <>
+          <div className="flex rounded-lg border p-0.5">
+            {(["preview", "blueprint"] as CanvasViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={playMode}
+                title={mode === "blueprint" ? "Blueprint wireframe" : "Rendered preview"}
+                onClick={() => setCanvasViewMode(mode)}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium capitalize",
+                  canvasViewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                )}
+              >
+                {mode === "blueprint" ? <LayoutGrid className="size-3" /> : null}
+                {mode}
+              </button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant={snapEnabled ? "default" : "outline"}
+            disabled={playMode}
+            title="Snap to sibling edges while resizing or moving"
+            onClick={() => setSnapEnabled(!snapEnabled)}
+          >
+            <Magnet className="size-3.5" />
+            Snap
+          </Button>
+          <select
           className="h-8 rounded-lg border bg-background px-2 text-xs"
           value={canvasState}
           disabled={playMode}
@@ -166,6 +199,7 @@ export function Toolbar() {
           <option value="empty">Canvas: empty</option>
           <option value="invalid">Canvas: invalid</option>
         </select>
+        </>
       ) : null}
       <Button
         size="sm"

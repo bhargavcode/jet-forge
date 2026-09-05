@@ -64,15 +64,21 @@ export function resolveActionParams(action: ClickAction, scope: BindingScope): R
 export function sourcesForScreen(
   dataSources: { id: string }[],
   screen: { dataSourceIds?: string[]; emptyPath?: string },
+  root?: UiNode,
 ): string[] {
+  const ids = new Set<string>();
   if (screen.dataSourceIds && screen.dataSourceIds.length > 0) {
-    return screen.dataSourceIds;
-  }
-  if (screen.emptyPath) {
+    screen.dataSourceIds.forEach((id) => ids.add(id));
+  } else if (screen.emptyPath) {
     const id = screen.emptyPath.split(".")[0];
-    if (id && dataSources.some((source) => source.id === id)) return [id];
+    if (id && dataSources.some((source) => source.id === id)) ids.add(id);
   }
-  return [];
+  if (root) {
+    walk(root, (node) => {
+      for (const id of node.dataSourceIds ?? []) ids.add(id);
+    });
+  }
+  return [...ids];
 }
 
 export function screenErrors(

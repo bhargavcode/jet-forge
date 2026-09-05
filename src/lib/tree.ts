@@ -1,4 +1,7 @@
-import type { NodeType, UiNode } from "./schema";
+import { nanoid } from "nanoid";
+import type { DropContext } from "./layout";
+import { defaultConstraintsForDrop } from "./layout";
+import type { ConstraintSpec, NodeType, UiNode } from "./schema";
 
 export function walk(node: UiNode, visit: (n: UiNode, parent: UiNode | null) => void, parent: UiNode | null = null) {
   visit(node, parent);
@@ -49,6 +52,7 @@ export function updateNode(root: UiNode, id: string, patch: Partial<UiNode>): Ui
       animation: patch.animation === undefined ? node.animation : patch.animation,
       visibleWhen: patch.visibleWhen !== undefined ? patch.visibleWhen : node.visibleWhen,
       visibleIf: "visibleIf" in patch ? patch.visibleIf : node.visibleIf,
+      constraints: patch.constraints === undefined ? node.constraints : patch.constraints,
     };
   });
 }
@@ -105,6 +109,34 @@ export function moveChild(root: UiNode, id: string, direction: -1 | 1): UiNode {
   return updateNode(root, parent.id, { children });
 }
 
+/** Sibling paint order: earlier = behind, later = in front. */
+export function moveChildToEdge(root: UiNode, id: string, edge: "back" | "front"): UiNode {
+  const parent = findParent(root, id);
+  if (!parent?.children) return root;
+  const index = parent.children.findIndex((c) => c.id === id);
+  if (index < 0) return root;
+  const children = [...parent.children];
+  const [item] = children.splice(index, 1);
+  if (edge === "back") children.unshift(item);
+  else children.push(item);
+  return updateNode(root, parent.id, { children });
+}
+
+export function siblingStackInfo(root: UiNode, id: string) {
+  const parent = findParent(root, id);
+  if (!parent?.children) return null;
+  const index = parent.children.findIndex((c) => c.id === id);
+  if (index < 0) return null;
+  return {
+    parentId: parent.id,
+    parentType: parent.type,
+    index,
+    count: parent.children.length,
+    canSendBackward: index > 0,
+    canBringForward: index < parent.children.length - 1,
+  };
+}
+
 export function isVirtualNodeId(id: string) {
   return id.endsWith("-content");
 }
@@ -120,8 +152,22 @@ export function isContainer(type: NodeType): boolean {
     type === "Row" ||
     type === "Box" ||
     type === "Card" ||
+    type === "Surface" ||
     type === "LazyColumn" ||
-    type === "NavigationBar"
+    type === "LazyRow" ||
+    type === "LazyVerticalGrid" ||
+    type === "HorizontalPager" ||
+    type === "NavigationDrawer" ||
+    type === "BottomSheet" ||
+    type === "Dialog" ||
+    type === "Badge" ||
+    type === "Tooltip" ||
+    type === "TabRow" ||
+    type === "DropdownMenu" ||
+    type === "SegmentedButton" ||
+    type === "NavigationBar" ||
+    type === "NavigationRail" ||
+    type === "PullRefresh"
   );
 }
 
@@ -189,10 +235,58 @@ export function stripBindingsToSource(root: UiNode, sourceId: string): UiNode {
 
 export function acceptsChild(parent: NodeType, child: NodeType): boolean {
   if (child === "NavigationBarItem") return parent === "NavigationBar";
-  if (parent === "NavigationBar") return false;
-  if (child === "TopAppBar" || child === "FAB" || child === "NavigationBar") {
+  if (child === "NavigationRailItem") return parent === "NavigationRail";
+  if (child === "Tab") return parent === "TabRow";
+  if (child === "DropdownMenuItem") return parent === "DropdownMenu" || parent === "ExposedDropdownMenu";
+  if (child === "SegmentedButtonItem") return parent === "SegmentedButton";
+  if (parent === "NavigationBar" || parent === "NavigationRail" || parent === "TabRow" || parent === "DropdownMenu" || parent === "SegmentedButton") {
+    return false;
+  }
+  if (child === "TopAppBar" || child === "FAB" || child === "NavigationBar" || child === "NavigationRail") {
     return parent === "Scaffold";
   }
   if (parent === "Scaffold") return true;
   return isContainer(parent);
+}
+
+function newId() {
+  return nanoid(8);
+}
+
+function remapConstraintRefs(constraints: ConstraintSpec | undefined): ConstraintSpec | undefined {
+  if (!constraints) return undefined;
+  return {
+    horizontal: constraints.horizontal,
+    vertical: constraints.vertical,
+    margin: constraints.margin,
+  };
+}
+
+export function cloneNodeTree(node: UiNode): UiNode {
+  const idMap = new Map<string, string>();
+  walk(node, (n) => idMap.set(n.id, newId()));
+
+  const clone = (n: UiNode): UiNode => {
+    const { children, constraints, ...rest } = n;
+    return {
+      ...structuredClone(rest),
+      id: idMap.get(n.id)!,
+      constraints: remapConstraintRefs(constraints),
+      children: children?.map(clone),
+    };
+  };
+  return clone(node);
+}
+
+export function prepareNodeForInsert(
+  node: UiNode,
+  parent: UiNode,
+  siblings: UiNode[],
+  index: number,
+  _drop?: DropContext,
+): UiNode {
+  return {
+    ...node,
+    constraints: defaultConstraintsForDrop(parent, siblings, index),
+  };
 }

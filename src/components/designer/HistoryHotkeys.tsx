@@ -8,6 +8,7 @@ export function HistoryHotkeys() {
   const undo = useDesigner((s) => s.undo);
   const redo = useDesigner((s) => s.redo);
   const deleteSelected = useDesigner((s) => s.deleteSelected);
+  const duplicateSelected = useDesigner((s) => s.duplicateSelected);
   const playMode = useDesigner((s) => s.playMode);
 
   useEffect(() => {
@@ -31,6 +32,12 @@ export function HistoryHotkeys() {
         return;
       }
       if (playMode || typing) return;
+      if (meta && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        const message = duplicateSelected();
+        if (message) toast.message(message);
+        return;
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         const message = deleteSelected();
@@ -39,7 +46,7 @@ export function HistoryHotkeys() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, deleteSelected, playMode]);
+  }, [undo, redo, deleteSelected, duplicateSelected, playMode]);
 
   return null;
 }

@@ -2,11 +2,13 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { DropContext } from "./layout";
 import { createNode } from "./catalog";
 import { currentRoot, currentScreen, mapAllRoots, normalizeDocument, patchScreen, replaceScreenRoot } from "./document";
 import type {
   AssetRef,
   CanvasState,
+  ComponentDef,
   DataSource,
   KotlinDataModel,
   NodeType,
@@ -15,18 +17,26 @@ import type {
   SlotName,
   UiNode,
   WorkspaceMode,
+  CanvasViewMode,
+  PreviewConfig,
 } from "./schema";
+import { DEFAULT_PREVIEW_CONFIG } from "./preview-config";
+import { flowPosition } from "./flow-layout";
 import { interactionsOf } from "./interactions";
+import type { SnapGuideLines } from "./snap";
 import { createStarterScreen } from "./starter-screen";
 import {
   acceptsChild,
   clearNodeWiring,
+  cloneNodeTree,
   countWiring,
   findNode,
   findParent,
   insertChild,
   mapTree,
   moveChild,
+  moveChildToEdge,
+  prepareNodeForInsert,
   relocateNode,
   removeNode,
   stripBindingsToSource,
@@ -39,6 +49,8 @@ export interface DesignerLayout {
   rightW: number;
   leftSplit: number;
   rightSplit: number;
+  /** When true, the Request | Models bottom pane is collapsed. */
+  rightBottomCollapsed?: boolean;
 }
 
 interface DesignerSnapshot {
@@ -58,10 +70,15 @@ interface DesignerState {
   playMode: boolean;
   canvasState: CanvasState;
   workspaceMode: WorkspaceMode;
+  canvasViewMode: CanvasViewMode;
+  snapGuides: SnapGuideLines | null;
+  snapEnabled: boolean;
+  previewConfig: PreviewConfig;
   past: DesignerSnapshot[];
   future: DesignerSnapshot[];
   layout: DesignerLayout;
   canvasZoom: number;
+  canvasPan: { x: number; y: number };
   canvasWire: { fromId: string; x: number; y: number; ox: number; oy: number } | null;
   select: (id: string | null) => void;
   setName: (name: string) => void;
@@ -70,12 +87,17 @@ interface DesignerState {
   addScreen: () => void;
   deleteCurrentScreen: () => string | null;
   patchCurrentScreen: (patch: Partial<ScreenDef>) => void;
-  addNode: (parentId: string, type: NodeType, slot?: SlotName, index?: number) => string | null;
+  addNode: (parentId: string, type: NodeType, slot?: SlotName, index?: number, drop?: DropContext) => string | null;
   patchNode: (id: string, patch: Partial<UiNode>) => void;
-  relocateNode: (nodeId: string, parentId: string, index: number) => string | null;
+  relocateNode: (nodeId: string, parentId: string, index: number, drop?: DropContext) => string | null;
   deleteSelected: () => string | null;
+  duplicateSelected: () => string | null;
+  duplicateCurrentScreen: () => string | null;
+  createComponentFromSelection: () => string | null;
+  instantiateComponent: (componentId: string, parentId: string, index?: number) => string | null;
   clearSelectedWiring: () => string | null;
   moveSelected: (direction: -1 | 1) => void;
+  stackSelected: (action: "backward" | "forward" | "back" | "front") => string | null;
   addDataSource: () => void;
   patchDataSource: (id: string, patch: Partial<DataSource>) => void;
   removeDataSource: (id: string) => void;
@@ -84,8 +106,14 @@ interface DesignerState {
   setPlayMode: (play: boolean) => void;
   setCanvasState: (state: CanvasState) => void;
   setWorkspaceMode: (mode: WorkspaceMode) => void;
+  setCanvasViewMode: (mode: CanvasViewMode) => void;
+  setSnapGuides: (guides: SnapGuideLines | null) => void;
+  setSnapEnabled: (enabled: boolean) => void;
+  setPreviewConfig: (patch: Partial<PreviewConfig>) => void;
   setLayout: (patch: Partial<DesignerLayout>) => void;
   setCanvasZoom: (zoom: number) => void;
+  setCanvasPan: (pan: { x: number; y: number }) => void;
+  panCanvasBy: (dx: number, dy: number) => void;
   startWire: (fromId: string, x: number, y: number) => void;
   updateWire: (x: number, y: number) => void;
   cancelWire: () => void;
@@ -122,8 +150,10 @@ export function documentFingerprint(screen: ScreenDocument) {
   return JSON.stringify({
     name: screen.name,
     theme: screen.theme,
+    assets: screen.assets,
     screens: screen.screens,
     dataSources: screen.dataSources,
+    components: screen.components,
     dataModels: screen.dataModels,
     activeModelId: screen.activeModelId,
     startScreenId: screen.startScreenId,
@@ -154,10 +184,15 @@ export const useDesigner = create<DesignerState>()(
         playMode: false,
         canvasState: "auto",
         workspaceMode: "design",
+        canvasViewMode: "preview",
+        snapGuides: null,
+        snapEnabled: true,
+        previewConfig: { ...DEFAULT_PREVIEW_CONFIG },
         past: [],
         future: [],
         layout: { leftW: 240, rightW: 320, leftSplit: 0.5, rightSplit: 0.58 },
         canvasZoom: 1,
+        canvasPan: { x: 0, y: 0 },
         canvasWire: null,
         publishedId: null,
         publishedFingerprint: null,
@@ -172,14 +207,15 @@ export const useDesigner = create<DesignerState>()(
           const id = `screen_${Math.random().toString(36).slice(2, 6)}`;
           const scaffold = createNode("Scaffold");
           const index = get().screen.screens.length;
+          const pos = flowPosition(index);
           const def: ScreenDef = {
             id,
             name: "New screen",
             route: `/${id}`,
             root: scaffold,
             dataSourceIds: [],
-            flowX: 48 + (index % 3) * 280,
-            flowY: 48 + Math.floor(index / 3) * 220,
+            flowX: pos.flowX,
+            flowY: pos.flowY,
           };
           set({
             ...historyPatch(),
@@ -211,20 +247,24 @@ export const useDesigner = create<DesignerState>()(
           const { screen, currentScreenId } = get();
           set({ ...historyPatch(), screen: patchScreen(screen, currentScreenId, patch) });
         },
-        addNode: (parentId, type, slot, index) => {
+        addNode: (parentId, type, slot, index, drop) => {
           const { screen, currentScreenId } = get();
           const root = currentRoot(screen, currentScreenId);
           const parent = findNode(root, parentId);
           if (!parent || !acceptsChild(parent.type, type)) return null;
-          const node = createNode(type);
+          let node = createNode(type);
           if (slot) node.slot = slot;
           if (parent.type === "Scaffold" && !slot) {
             if (type === "TopAppBar") node.slot = "topBar";
             else if (type === "NavigationBar") node.slot = "bottomBar";
+            else if (type === "NavigationRail") node.slot = "rail";
             else if (type === "FAB") node.slot = "fab";
             else node.slot = "content";
           }
-          const nextRoot = insertChild(root, parentId, node, index);
+          const siblings = parent.children ?? [];
+          const at = index === undefined ? siblings.length : Math.max(0, Math.min(index, siblings.length));
+          node = prepareNodeForInsert(node, parent, siblings, at, drop);
+          const nextRoot = insertChild(root, parentId, node, at);
           set({
             ...historyPatch(),
             screen: withRoot(screen, currentScreenId, nextRoot),
@@ -262,6 +302,109 @@ export const useDesigner = create<DesignerState>()(
           });
           return `Removed ${target.type} (${stats.widgets} widget${stats.widgets === 1 ? "" : "s"}, ${stats.bindings} binding${stats.bindings === 1 ? "" : "s"}, ${stats.wires} wire${stats.wires === 1 ? "" : "s"}).`;
         },
+        duplicateSelected: () => {
+          const { selectedId, screen, currentScreenId } = get();
+          const root = currentRoot(screen, currentScreenId);
+          if (!selectedId || selectedId === root.id) return "Select a widget to duplicate.";
+          const target = findNode(root, selectedId);
+          if (!target) return null;
+          const parent = findParent(root, selectedId);
+          if (!parent) return null;
+          const index = parent.children?.findIndex((c) => c.id === selectedId) ?? -1;
+          const clone = cloneNodeTree(target);
+          const nextRoot = insertChild(root, parent.id, clone, index + 1);
+          set({
+            ...historyPatch(),
+            screen: withRoot(screen, currentScreenId, nextRoot),
+            selectedId: clone.id,
+          });
+          return `Duplicated ${target.type}.`;
+        },
+        duplicateCurrentScreen: () => {
+          const { screen, currentScreenId } = get();
+          const source = currentScreen(screen, currentScreenId);
+          const id = `screen_${Math.random().toString(36).slice(2, 6)}`;
+          const cloneRoot = cloneNodeTree(source.root);
+          const index = screen.screens.length;
+          const pos = flowPosition(index);
+          const def: ScreenDef = {
+            ...structuredClone(source),
+            id,
+            name: `${source.name} copy`,
+            route: `/${id}`,
+            root: cloneRoot,
+            flowX: pos.flowX,
+            flowY: pos.flowY,
+          };
+          set({
+            ...historyPatch(),
+            screen: { ...screen, screens: [...screen.screens, def] },
+            currentScreenId: id,
+            selectedId: cloneRoot.id,
+          });
+          return `Duplicated screen "${source.name}".`;
+        },
+        createComponentFromSelection: () => {
+          const { selectedId, screen, currentScreenId } = get();
+          const root = currentRoot(screen, currentScreenId);
+          if (!selectedId || selectedId === root.id) return "Select a widget to save as a component.";
+          const target = findNode(root, selectedId);
+          if (!target) return null;
+          const componentId = `comp_${Math.random().toString(36).slice(2, 6)}`;
+          const component: ComponentDef = {
+            id: componentId,
+            name: String(target.props.label ?? target.props.text ?? target.type),
+            root: cloneNodeTree(target),
+          };
+          const instance: UiNode = {
+            id: target.id,
+            type: target.type,
+            props: { ...target.props },
+            modifiers: { ...target.modifiers },
+            drawable: target.drawable,
+            bindings: target.bindings ? { ...target.bindings } : undefined,
+            constraints: target.constraints,
+            dataSourceIds: target.dataSourceIds,
+            refComponentId: componentId,
+            animation: target.animation,
+            interactions: target.interactions,
+            onClick: target.onClick,
+            visibleWhen: target.visibleWhen,
+            visibleIf: target.visibleIf,
+          };
+          const nextRoot = updateNode(root, selectedId, instance);
+          set({
+            ...historyPatch(),
+            screen: {
+              ...withRoot(screen, currentScreenId, nextRoot),
+              components: [...(screen.components ?? []), component],
+            },
+            selectedId: instance.id,
+          });
+          return `Created component "${component.name}".`;
+        },
+        instantiateComponent: (componentId, parentId, index) => {
+          const { screen, currentScreenId } = get();
+          const component = (screen.components ?? []).find((c) => c.id === componentId);
+          if (!component) return null;
+          const root = currentRoot(screen, currentScreenId);
+          const parent = findNode(root, parentId);
+          if (!parent) return null;
+          const instance: UiNode = {
+            ...cloneNodeTree(component.root),
+            refComponentId: componentId,
+          };
+          const siblings = parent.children ?? [];
+          const at = index === undefined ? siblings.length : Math.max(0, Math.min(index, siblings.length));
+          const prepared = prepareNodeForInsert(instance, parent, siblings, at);
+          const nextRoot = insertChild(root, parentId, prepared, at);
+          set({
+            ...historyPatch(),
+            screen: withRoot(screen, currentScreenId, nextRoot),
+            selectedId: prepared.id,
+          });
+          return prepared.id;
+        },
         clearSelectedWiring: () => {
           const { selectedId, screen, currentScreenId } = get();
           const root = currentRoot(screen, currentScreenId);
@@ -287,13 +430,42 @@ export const useDesigner = create<DesignerState>()(
           if (next === root) return;
           set({ ...historyPatch(), screen: withRoot(screen, currentScreenId, next) });
         },
-        relocateNode: (nodeId, parentId, index) => {
+        stackSelected: (action) => {
+          const { selectedId, screen, currentScreenId } = get();
+          if (!selectedId) return null;
+          const root = currentRoot(screen, currentScreenId);
+          const target = findNode(root, selectedId);
+          if (!target) return null;
+          const next =
+            action === "forward"
+              ? moveChild(root, selectedId, 1)
+              : action === "backward"
+                ? moveChild(root, selectedId, -1)
+                : moveChildToEdge(root, selectedId, action === "front" ? "front" : "back");
+          if (next === root) return "Already at the edge of this container.";
+          set({ ...historyPatch(), screen: withRoot(screen, currentScreenId, next) });
+          const labels = {
+            forward: "Brought forward",
+            backward: "Sent backward",
+            front: "Brought to front",
+            back: "Sent to back",
+          } as const;
+          return `${labels[action]} (${target.type})`;
+        },
+        relocateNode: (nodeId, parentId, index, drop) => {
           const { screen, currentScreenId } = get();
           const root = currentRoot(screen, currentScreenId);
           const moving = findNode(root, nodeId);
           if (!moving) return null;
-          const next = relocateNode(root, nodeId, parentId, index);
+          const parentBefore = findNode(root, parentId);
+          const siblings = (parentBefore?.children ?? []).filter((child) => child.id !== nodeId);
+          let next = relocateNode(root, nodeId, parentId, index);
           if (next === root) return "That drop is not allowed for this widget.";
+          const newParent = findNode(next, parentId);
+          if (newParent) {
+            const prepared = prepareNodeForInsert(moving, newParent, siblings, index, drop);
+            next = updateNode(next, nodeId, { constraints: prepared.constraints });
+          }
           set({
             ...historyPatch(),
             screen: withRoot(screen, currentScreenId, next),
@@ -366,6 +538,11 @@ export const useDesigner = create<DesignerState>()(
         setPlayMode: (play) => set({ playMode: play, workspaceMode: play ? "design" : get().workspaceMode }),
         setCanvasState: (canvasState) => set({ canvasState }),
         setWorkspaceMode: (workspaceMode) => set({ workspaceMode, playMode: false }),
+        setCanvasViewMode: (canvasViewMode) => set({ canvasViewMode }),
+        setSnapGuides: (snapGuides) => set({ snapGuides }),
+        setSnapEnabled: (snapEnabled) => set({ snapEnabled }),
+        setPreviewConfig: (patch) =>
+          set((state) => ({ previewConfig: { ...state.previewConfig, ...patch } })),
         setLayout: (patch) => {
           const layout = get().layout;
           set({
@@ -374,10 +551,16 @@ export const useDesigner = create<DesignerState>()(
               rightW: Math.min(520, Math.max(240, patch.rightW ?? layout.rightW)),
               leftSplit: Math.min(0.78, Math.max(0.22, patch.leftSplit ?? layout.leftSplit)),
               rightSplit: Math.min(0.82, Math.max(0.28, patch.rightSplit ?? layout.rightSplit)),
+              rightBottomCollapsed: patch.rightBottomCollapsed ?? layout.rightBottomCollapsed ?? false,
             },
           });
         },
         setCanvasZoom: (zoom) => set({ canvasZoom: Math.min(2.4, Math.max(0.45, zoom)) }),
+        setCanvasPan: (pan) => set({ canvasPan: { x: pan.x, y: pan.y } }),
+        panCanvasBy: (dx, dy) => {
+          const pan = get().canvasPan;
+          set({ canvasPan: { x: pan.x + dx, y: pan.y + dy } });
+        },
         startWire: (fromId, x, y) => set({ canvasWire: { fromId, x, y, ox: x, oy: y } }),
         updateWire: (x, y) => {
           const wire = get().canvasWire;
@@ -542,6 +725,10 @@ export const useDesigner = create<DesignerState>()(
         liveData: state.liveData,
         layout: state.layout,
         canvasZoom: state.canvasZoom,
+        canvasPan: state.canvasPan,
+        canvasViewMode: state.canvasViewMode,
+        snapEnabled: state.snapEnabled,
+        previewConfig: state.previewConfig,
         publishedId: state.publishedId,
         publishedFingerprint: state.publishedFingerprint,
       }),
@@ -557,6 +744,13 @@ export const useDesigner = create<DesignerState>()(
           future: [],
           layout: { ...current.layout, ...(raw.layout ?? {}) },
           canvasZoom: typeof raw.canvasZoom === "number" ? raw.canvasZoom : current.canvasZoom,
+          canvasPan:
+            raw.canvasPan && typeof raw.canvasPan.x === "number" && typeof raw.canvasPan.y === "number"
+              ? raw.canvasPan
+              : current.canvasPan,
+          canvasViewMode: raw.canvasViewMode ?? current.canvasViewMode,
+          snapEnabled: raw.snapEnabled ?? current.snapEnabled,
+          previewConfig: { ...current.previewConfig, ...(raw.previewConfig ?? {}) },
           publishedId: raw.publishedId ?? null,
           publishedFingerprint: raw.publishedFingerprint ?? null,
         };

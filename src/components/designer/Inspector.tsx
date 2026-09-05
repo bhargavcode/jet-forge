@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { BINDABLE_PROPS } from "@/lib/catalog";
 import { flattenSources } from "@/lib/bindings";
 import { bindableComposeProps } from "@/lib/model";
@@ -14,8 +13,10 @@ import type {
   EnterAnimationType,
   IconName,
   Interaction,
+  PaddingSpec,
   TextStyle,
   TouchEvent,
+  SizeMode,
   UiNode,
   VisibleWhen,
 } from "@/lib/schema";
@@ -33,7 +34,7 @@ import { AssetUpload } from "./AssetUpload";
 import { ModelBrowser } from "./ModelBrowser";
 import { useDesigner } from "@/lib/store";
 import { currentRoot } from "@/lib/document";
-import { findNode } from "@/lib/tree";
+import { findNode, isContainer } from "@/lib/tree";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import type { ReactNode } from "react";
 
 const TEXT_STYLES: TextStyle[] = [
   "displayLarge",
@@ -68,6 +70,8 @@ const COLORS: ColorToken[] = [
   "primaryContainer",
   "onPrimaryContainer",
   "secondary",
+  "secondaryContainer",
+  "onSecondaryContainer",
   "surface",
   "onSurface",
   "onSurfaceVariant",
@@ -126,12 +130,203 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+type SpacingMode = "sides" | "all" | "horizontal" | "vertical" | "start" | "end" | "top" | "bottom";
+
+const SPACING_MODES: { value: SpacingMode; label: string }[] = [
+  { value: "sides", label: "Start / End / Top / Bottom" },
+  { value: "all", label: "All" },
+  { value: "horizontal", label: "Horizontal" },
+  { value: "vertical", label: "Vertical" },
+  { value: "start", label: "Start" },
+  { value: "end", label: "End" },
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+];
+
+function spacingFallback(spec?: PaddingSpec) {
+  return spec?.all ?? spec?.start ?? spec?.end ?? spec?.top ?? spec?.bottom ?? 0;
+}
+
+function inferSpacingMode(spec?: PaddingSpec): SpacingMode {
+  if (!spec) return "all";
+  if (spec.all != null) return "all";
+  const { start, end, top, bottom } = spec;
+  const set = [start, end, top, bottom].filter((v) => v != null).length;
+  if (start != null && end != null && start === end && top == null && bottom == null) return "horizontal";
+  if (top != null && bottom != null && top === bottom && start == null && end == null) return "vertical";
+  if (set === 1 && start != null) return "start";
+  if (set === 1 && end != null) return "end";
+  if (set === 1 && top != null) return "top";
+  if (set === 1 && bottom != null) return "bottom";
+  if (set > 0) return "sides";
+  return "all";
+}
+
+function spacingForMode(mode: SpacingMode, spec?: PaddingSpec): PaddingSpec {
+  const v = spacingFallback(spec);
+  switch (mode) {
+    case "all":
+      return { all: v };
+    case "horizontal":
+      return { start: spec?.start ?? v, end: spec?.end ?? spec?.start ?? v };
+    case "vertical":
+      return { top: spec?.top ?? v, bottom: spec?.bottom ?? spec?.top ?? v };
+    case "start":
+      return { start: spec?.start ?? v };
+    case "end":
+      return { end: spec?.end ?? v };
+    case "top":
+      return { top: spec?.top ?? v };
+    case "bottom":
+      return { bottom: spec?.bottom ?? v };
+    case "sides":
+      return {
+        start: spec?.start ?? spec?.all ?? 0,
+        end: spec?.end ?? spec?.all ?? 0,
+        top: spec?.top ?? spec?.all ?? 0,
+        bottom: spec?.bottom ?? spec?.all ?? 0,
+      };
+  }
+}
+
+function parseDp(raw: string): number {
+  if (raw.trim() === "") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function SpacingEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value?: PaddingSpec;
+  onChange: (next: PaddingSpec) => void;
+}) {
+  const mode = inferSpacingMode(value);
+
+  const setMode = (next: SpacingMode) => onChange(spacingForMode(next, value));
+
+  const setSide = (side: keyof PaddingSpec, raw: string) => {
+    const n = parseDp(raw);
+    if (mode === "all") {
+      onChange({ all: n });
+      return;
+    }
+    if (mode === "horizontal") {
+      onChange({ start: n, end: n });
+      return;
+    }
+    if (mode === "vertical") {
+      onChange({ top: n, bottom: n });
+      return;
+    }
+    if (mode === "sides") {
+      onChange({
+        start: value?.start ?? 0,
+        end: value?.end ?? 0,
+        top: value?.top ?? 0,
+        bottom: value?.bottom ?? 0,
+        [side]: n,
+      });
+      return;
+    }
+    onChange({ [side]: n });
+  };
+
+  const singleValue =
+    mode === "all"
+      ? (value?.all ?? 0)
+      : mode === "horizontal"
+        ? (value?.start ?? 0)
+        : mode === "vertical"
+          ? (value?.top ?? 0)
+          : mode === "start"
+            ? (value?.start ?? 0)
+            : mode === "end"
+              ? (value?.end ?? 0)
+              : mode === "top"
+                ? (value?.top ?? 0)
+                : (value?.bottom ?? 0);
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/70 p-2">
+      <Field label={label}>
+        <Select value={mode} onValueChange={(next) => next && setMode(next as SpacingMode)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SPACING_MODES.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {mode === "sides" ? (
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            ["start", "Start"],
+            ["end", "End"],
+            ["top", "Top"],
+            ["bottom", "Bottom"],
+          ] as const).map(([side, sideLabel]) => (
+            <Field key={side} label={sideLabel}>
+              <Input
+                type="number"
+                min={0}
+                value={value?.[side] ?? 0}
+                onChange={(e) => setSide(side, e.target.value)}
+              />
+            </Field>
+          ))}
+        </div>
+      ) : (
+        <Field
+          label={
+            mode === "all"
+              ? "All (dp)"
+              : mode === "horizontal"
+                ? "Horizontal (dp)"
+                : mode === "vertical"
+                  ? "Vertical (dp)"
+                  : `${mode[0]!.toUpperCase()}${mode.slice(1)} (dp)`
+          }
+        >
+          <Input
+            type="number"
+            min={0}
+            value={singleValue}
+            onChange={(e) =>
+              setSide(
+                mode === "all"
+                  ? "all"
+                  : mode === "horizontal"
+                    ? "start"
+                    : mode === "vertical"
+                      ? "top"
+                      : mode,
+                e.target.value,
+              )
+            }
+          />
+        </Field>
+      )}
+    </div>
+  );
+}
+
 export function Inspector() {
   const screen = useDesigner((s) => s.screen);
   const currentScreenId = useDesigner((s) => s.currentScreenId);
   const selectedId = useDesigner((s) => s.selectedId);
   const patchNode = useDesigner((s) => s.patchNode);
   const deleteSelected = useDesigner((s) => s.deleteSelected);
+  const duplicateSelected = useDesigner((s) => s.duplicateSelected);
+  const createComponentFromSelection = useDesigner((s) => s.createComponentFromSelection);
   const clearSelectedWiring = useDesigner((s) => s.clearSelectedWiring);
   const setActiveModelId = useDesigner((s) => s.setActiveModelId);
   const previewData = useDesigner((s) => s.previewData);
@@ -171,7 +366,27 @@ export function Inspector() {
             {node.id}
           </Badge>
         </div>
-        <div className="mb-2 flex gap-1">
+        <div className="mb-2 flex flex-wrap gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const message = duplicateSelected();
+              if (message) toast.message(message);
+            }}
+          >
+            Duplicate
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const message = createComponentFromSelection();
+              if (message) toast.message(message);
+            }}
+          >
+            Make component
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -211,28 +426,15 @@ export function Inspector() {
       <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <TabsContent value="props" className="mt-0 space-y-4 p-3">
           <TypeFields node={node} setProp={setProp} />
-          <ComposeLayout node={node} patchNode={patchNode} />
+          <ContainerAlignmentFields node={node} patchNode={patchNode} />
+          <NodeApiFields node={node} dataSources={screen.dataSources} patchNode={patchNode} />
+          <ComposeLayout node={node} patchNode={patchNode} isContainer={isContainer(node.type)} />
           <DrawableFields node={node} patchNode={patchNode} />
-          <Field label="Fill width">
-            <Switch
-              checked={Boolean(node.modifiers.fillMaxWidth)}
-              onCheckedChange={(checked) =>
-                patchNode(node.id, { modifiers: { ...node.modifiers, fillMaxWidth: Boolean(checked) } })
-              }
-            />
-          </Field>
-          <Field label="Padding">
-            <Input
-              type="number"
-              value={node.modifiers.padding?.all ?? node.modifiers.padding?.start ?? 0}
-              onChange={(e) =>
-                patchNode(node.id, {
-                  modifiers: { ...node.modifiers, padding: { all: Number(e.target.value) } },
-                })
-              }
-            />
-          </Field>
-          {node.type === "LazyColumn" || node.type === "Column" || node.type === "Row" ? (
+          {node.type === "LazyColumn" ||
+          node.type === "LazyRow" ||
+          node.type === "LazyVerticalGrid" ||
+          node.type === "Column" ||
+          node.type === "Row" ? (
             <Field label="Item binding (list path)">
               <Input
                 placeholder="news.articles"
@@ -914,6 +1116,84 @@ function ButtonChromeFields({
           </SelectContent>
         </Select>
       </Field>
+      {node.type === "FilledButton" || node.type === "TonalButton" || node.type === "ElevatedButton" ? (
+        <Field label="Container color token">
+          <Select
+            value={String(
+              node.props.containerColorToken ??
+                (node.type === "TonalButton"
+                  ? "secondaryContainer"
+                  : node.type === "ElevatedButton"
+                    ? "surfaceContainer"
+                    : "primary"),
+            )}
+            onValueChange={(v) => v && setProp("containerColorToken", v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COLORS.map((color) => (
+                <SelectItem key={color} value={color}>
+                  {color}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      ) : null}
+      <Field label="Content color token">
+        <Select
+          value={String(
+            node.props.contentColorToken ??
+              (node.type === "FilledButton"
+                ? "onPrimary"
+                : node.type === "TonalButton"
+                  ? "onSecondaryContainer"
+                  : "primary"),
+          )}
+          onValueChange={(v) => v && setProp("contentColorToken", v)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {COLORS.map((color) => (
+              <SelectItem key={color} value={color}>
+                {color}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {node.type === "Chip" ? (
+        <>
+          <Field label="Chip variant">
+            <Select
+              value={String(node.props.chipVariant ?? "assist")}
+              onValueChange={(v) => v && setProp("chipVariant", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="assist">Assist</SelectItem>
+                <SelectItem value="filter">Filter</SelectItem>
+                <SelectItem value="input">Input</SelectItem>
+                <SelectItem value="suggestion">Suggestion</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {(node.props.chipVariant === "filter" || node.props.chipVariant === "input") && (
+            <Field label="Selected">
+              <Switch
+                checked={Boolean(node.props.selected)}
+                onCheckedChange={(checked) => setProp("selected", Boolean(checked))}
+              />
+            </Field>
+          )}
+        </>
+      ) : null}
       <p className="text-xs leading-5 text-muted-foreground">
         Container fill, gradient, and image live in Drawable. Shape, size, elevation, and padding are Compose modifiers.
       </p>
@@ -929,7 +1209,34 @@ function TypeFields({
   setProp: (key: string, value: string | number | boolean) => void;
 }) {
   if (node.type === "Text") {
-    return <TextChromeFields node={node} setProp={setProp} contentKey="text" contentLabel="Text" />;
+    return (
+      <>
+        <TextChromeFields node={node} setProp={setProp} contentKey="text" contentLabel="Text" />
+        <Section title="Text (Compose)">
+          <Field label="Soft wrap">
+            <Switch
+              checked={node.props.softWrap !== false}
+              onCheckedChange={(checked) => setProp("softWrap", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Letter spacing">
+            <Input
+              type="number"
+              step={0.1}
+              value={node.props.letterSpacing == null ? "" : String(node.props.letterSpacing)}
+              onChange={(e) => setProp("letterSpacing", e.target.value === "" ? 0 : Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Line height dp">
+            <Input
+              type="number"
+              value={node.props.lineHeightDp == null ? "" : String(node.props.lineHeightDp)}
+              onChange={(e) => setProp("lineHeightDp", e.target.value === "" ? 0 : Number(e.target.value))}
+            />
+          </Field>
+        </Section>
+      </>
+    );
   }
 
   if (isButtonType(node.type)) {
@@ -937,6 +1244,14 @@ function TypeFields({
       <>
         <TextChromeFields node={node} setProp={setProp} contentKey="label" contentLabel="Label" />
         <ButtonChromeFields node={node} setProp={setProp} />
+        <Section title="Button (Material3)">
+          <Field label="Content description">
+            <Input
+              value={String(node.props.contentDescription ?? "")}
+              onChange={(e) => setProp("contentDescription", e.target.value)}
+            />
+          </Field>
+        </Section>
       </>
     );
   }
@@ -945,23 +1260,74 @@ function TypeFields({
     return (
       <>
         <TextChromeFields node={node} setProp={setProp} contentKey="title" contentLabel="Title" />
-        <Field label="Navigation icon">
-          <Select
-            value={String(node.props.navigationIcon ?? "menu")}
-            onValueChange={(v) => v && setProp("navigationIcon", v)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ICONS.map((icon) => (
-                <SelectItem key={icon} value={icon}>
-                  {icon}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <Section title="TopAppBar">
+          <Field label="Navigation icon">
+            <Select
+              value={String(node.props.navigationIcon ?? "menu")}
+              onValueChange={(v) => v && setProp("navigationIcon", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Action icon">
+            <Select
+              value={String(node.props.actionIcon ?? "notifications")}
+              onValueChange={(v) => v && setProp("actionIcon", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Style">
+            <Select value={String(node.props.barStyle ?? "small")} onValueChange={(v) => v && setProp("barStyle", v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="center">CenterAligned</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {(node.props.barStyle === "medium" || node.props.barStyle === "large") && (
+            <Field label="Scroll behavior">
+              <Select
+                value={String(node.props.scrollBehavior ?? "pinned")}
+                onValueChange={(v) => v && setProp("scrollBehavior", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pinned">Pinned</SelectItem>
+                  <SelectItem value="enterAlways">EnterAlways</SelectItem>
+                  <SelectItem value="exitUntilCollapsed">ExitUntilCollapsed</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        </Section>
       </>
     );
   }
@@ -969,7 +1335,7 @@ function TypeFields({
   if (node.type === "TextField") {
     return (
       <>
-        <Section title="Field">
+        <Section title="TextField (Material3)">
           <Field label="Label">
             <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
           </Field>
@@ -982,11 +1348,89 @@ function TypeFields({
           <Field label="Value">
             <Input value={String(node.props.value ?? "")} onChange={(e) => setProp("value", e.target.value)} />
           </Field>
+          <Field label="Supporting text">
+            <Input
+              value={String(node.props.supportingText ?? "")}
+              onChange={(e) => setProp("supportingText", e.target.value)}
+            />
+          </Field>
+          <Field label="Variant">
+            <Select value={String(node.props.variant ?? "outlined")} onValueChange={(v) => v && setProp("variant", v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="outlined">Outlined</SelectItem>
+                <SelectItem value="filled">Filled</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Single line">
+            <Switch
+              checked={node.props.singleLine !== false}
+              onCheckedChange={(checked) => setProp("singleLine", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Max lines">
+            <Input
+              type="number"
+              value={Number(node.props.maxLines ?? 1)}
+              onChange={(e) => setProp("maxLines", Number(e.target.value))}
+            />
+          </Field>
           <Field label="Enabled">
             <Switch
               checked={node.props.enabled !== false}
               onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
             />
+          </Field>
+          <Field label="Read only">
+            <Switch
+              checked={Boolean(node.props.readOnly)}
+              onCheckedChange={(checked) => setProp("readOnly", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Is error">
+            <Switch
+              checked={Boolean(node.props.isError)}
+              onCheckedChange={(checked) => setProp("isError", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Leading icon">
+            <Select
+              value={String(node.props.leadingIcon ?? "none")}
+              onValueChange={(v) => v && setProp("leadingIcon", v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Trailing icon">
+            <Select
+              value={String(node.props.trailingIcon ?? "none")}
+              onValueChange={(v) => v && setProp("trailingIcon", v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           <Field label="Label color token">
             <Select
@@ -1015,59 +1459,280 @@ function TypeFields({
     return (
       <>
         <TextChromeFields node={node} setProp={setProp} contentKey="headline" contentLabel="Headline" />
-        <Field label="Supporting">
-          <Input
-            value={String(node.props.supporting ?? "")}
-            onChange={(e) => setProp("supporting", e.target.value)}
-          />
-        </Field>
+        <Section title="ListItem">
+          <Field label="Supporting">
+            <Input
+              value={String(node.props.supporting ?? "")}
+              onChange={(e) => setProp("supporting", e.target.value)}
+            />
+          </Field>
+          <Field label="Overline">
+            <Input value={String(node.props.overline ?? "")} onChange={(e) => setProp("overline", e.target.value)} />
+          </Field>
+          <Field label="Leading icon">
+            <Select
+              value={String(node.props.leadingIcon ?? "star")}
+              onValueChange={(v) => v && setProp("leadingIcon", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Trailing icon">
+            <Select
+              value={String(node.props.trailingIcon ?? "none")}
+              onValueChange={(v) => v && setProp("trailingIcon", v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ICONS.map((icon) => (
+                  <SelectItem key={icon} value={icon}>
+                    {icon}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </Section>
       </>
     );
   }
 
-  if (node.type === "Icon" || node.type === "FAB" || node.type === "NavigationBarItem") {
+  if (node.type === "Icon" || node.type === "FAB" || node.type === "IconButton" || node.type === "NavigationBarItem" || node.type === "NavigationRailItem") {
     return (
       <>
-        {node.type !== "Icon" && node.type !== "FAB" ? (
-          <Field label="Label">
-            <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
-          </Field>
-        ) : null}
-        <Field label="Icon">
-          <Select
-            value={String(node.props.name ?? node.props.icon ?? "star")}
-            onValueChange={(v) => v && setProp(node.type === "Icon" ? "name" : "icon", v)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ICONS.map((icon) => (
-                <SelectItem key={icon} value={icon}>
-                  {icon}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        {node.type === "NavigationBarItem" ? (
-          <Field label="Selected">
-            <Switch
-              checked={Boolean(node.props.selected)}
-              onCheckedChange={(checked) => setProp("selected", Boolean(checked))}
-            />
-          </Field>
-        ) : null}
-        {node.type === "Icon" ? (
-          <Field label="Custom icon from device">
-            <AssetUpload
-              kind="icon"
-              currentUrl={String(node.props.url ?? "")}
-              onPicked={(url) => setProp("url", url)}
-            />
-          </Field>
-        ) : null}
+        <Section title={node.type}>
+          {node.type === "NavigationBarItem" || node.type === "NavigationRailItem" ? (
+            <Field label="Label">
+              <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+            </Field>
+          ) : null}
+          {node.type !== "Icon" ? (
+            <Field label="Icon">
+              <Select
+                value={String(node.props.name ?? node.props.icon ?? "star")}
+                onValueChange={(v) => v && setProp(node.type === "Icon" ? "name" : "icon", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ICONS.map((icon) => (
+                    <SelectItem key={icon} value={icon}>
+                      {icon}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Icon">
+              <Select
+                value={String(node.props.name ?? node.props.icon ?? "star")}
+                onValueChange={(v) => v && setProp("name", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ICONS.map((icon) => (
+                    <SelectItem key={icon} value={icon}>
+                      {icon}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+          {node.type === "Icon" ? (
+            <>
+              <Field label="Size dp">
+                <Input
+                  type="number"
+                  value={Number(node.props.size ?? 24)}
+                  onChange={(e) => setProp("size", Number(e.target.value))}
+                />
+              </Field>
+              <Field label="Tint token">
+                <Select
+                  value={String(node.props.color ?? "onSurface")}
+                  onValueChange={(v) => v && setProp("color", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COLORS.map((color) => (
+                      <SelectItem key={color} value={color}>
+                        {color}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Custom icon from device">
+                <AssetUpload
+                  kind="icon"
+                  currentUrl={String(node.props.url ?? "")}
+                  onPicked={(url) => setProp("url", url)}
+                />
+              </Field>
+            </>
+          ) : null}
+          {node.type === "FAB" ? (
+            <>
+              <Field label="Size">
+                <Select value={String(node.props.fabSize ?? "default")} onValueChange={(v) => v && setProp("fabSize", v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                    <SelectItem value="extended">Extended</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Extended label">
+                <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+              </Field>
+              <Field label="Content description">
+                <Input
+                  value={String(node.props.contentDescription ?? "")}
+                  onChange={(e) => setProp("contentDescription", e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
+          {node.type === "IconButton" ? (
+            <>
+              <Field label="Variant">
+                <Select
+                  value={String(node.props.iconButtonVariant ?? "standard")}
+                  onValueChange={(v) => v && setProp("iconButtonVariant", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="filled">Filled</SelectItem>
+                    <SelectItem value="filledTonal">Filled tonal</SelectItem>
+                    <SelectItem value="outlined">Outlined</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Size">
+                <Select
+                  value={String(node.props.iconButtonSize ?? "default")}
+                  onValueChange={(v) => v && setProp("iconButtonSize", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Enabled">
+                <Switch
+                  checked={node.props.enabled !== false}
+                  onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+                />
+              </Field>
+              <Field label="Content description">
+                <Input
+                  value={String(node.props.contentDescription ?? "")}
+                  onChange={(e) => setProp("contentDescription", e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
+          {(node.type === "NavigationBarItem" || node.type === "NavigationRailItem") ? (
+            <Field label="Selected">
+              <Switch
+                checked={Boolean(node.props.selected)}
+                onCheckedChange={(checked) => setProp("selected", Boolean(checked))}
+              />
+            </Field>
+          ) : null}
+        </Section>
       </>
+    );
+  }
+
+  if (node.type === "Slider") {
+    return (
+      <Section title="Slider (Material3)">
+        <Field label="Value (0–1)">
+          <Input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={Number(node.props.value ?? 0.5)}
+            onChange={(e) => setProp("value", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Min">
+          <Input
+            type="number"
+            value={Number(node.props.valueMin ?? 0)}
+            onChange={(e) => setProp("valueMin", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Max">
+          <Input
+            type="number"
+            value={Number(node.props.valueMax ?? 100)}
+            onChange={(e) => setProp("valueMax", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Enabled">
+          <Switch
+            checked={node.props.enabled !== false}
+            onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "RadioButton") {
+    return (
+      <Section title="RadioButton">
+        <Field label="Label">
+          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+        </Field>
+        <Field label="Selected">
+          <Switch
+            checked={Boolean(node.props.selected)}
+            onCheckedChange={(checked) => setProp("selected", Boolean(checked))}
+          />
+        </Field>
+        <Field label="Enabled">
+          <Switch
+            checked={node.props.enabled !== false}
+            onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+          />
+        </Field>
+      </Section>
     );
   }
 
@@ -1075,38 +1740,66 @@ function TypeFields({
     return (
       <>
         <TextChromeFields node={node} setProp={setProp} contentKey="label" contentLabel="Label" />
-        <Field label="Checked">
-          <Switch checked={Boolean(node.props.checked)} onCheckedChange={(checked) => setProp("checked", Boolean(checked))} />
-        </Field>
+        <Section title={node.type}>
+          <Field label="Checked">
+            <Switch
+              checked={Boolean(node.props.checked)}
+              onCheckedChange={(checked) => setProp("checked", Boolean(checked))}
+            />
+          </Field>
+          <Field label="Enabled">
+            <Switch
+              checked={node.props.enabled !== false}
+              onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+            />
+          </Field>
+        </Section>
       </>
     );
   }
 
   if (node.type === "Card") {
     return (
-      <Field label="Variant">
-        <Select value={String(node.props.variant ?? "elevated")} onValueChange={(v) => v && setProp("variant", v)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="elevated">elevated</SelectItem>
-            <SelectItem value="outlined">outlined</SelectItem>
-            <SelectItem value="filled">filled</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
+      <Section title="Card">
+        <Field label="Variant">
+          <Select value={String(node.props.variant ?? "elevated")} onValueChange={(v) => v && setProp("variant", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="elevated">elevated</SelectItem>
+              <SelectItem value="outlined">outlined</SelectItem>
+              <SelectItem value="filled">filled</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Enabled">
+          <Switch
+            checked={node.props.enabled !== false}
+            onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+          />
+        </Field>
+      </Section>
     );
   }
 
   if (node.type === "Image") {
     return (
-      <>
+      <Section title="Image (Compose)">
         <Field label="Placeholder (device upload)">
           <AssetUpload kind="image" currentUrl={String(node.props.url ?? "")} onPicked={(url) => setProp("url", url)} />
         </Field>
-        <Field label="Placeholder URL">
+        <Field label="URL">
           <Input value={String(node.props.url ?? "")} onChange={(e) => setProp("url", e.target.value)} />
+        </Field>
+        <Field label="Content description / alt">
+          <Input value={String(node.props.alt ?? "")} onChange={(e) => setProp("alt", e.target.value)} />
+        </Field>
+        <Field label="Accent (placeholder)">
+          <ColorInput
+            value={String(node.props.accent ?? "#6750A4")}
+            onChange={(value) => setProp("accent", value)}
+          />
         </Field>
         <Field label="Content scale">
           <Select value={String(node.props.contentScale ?? "crop")} onValueChange={(v) => v && setProp("contentScale", v)}>
@@ -1114,15 +1807,376 @@ function TypeFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="crop">crop (ContentScale.Crop)</SelectItem>
-              <SelectItem value="fit">fit (ContentScale.Fit)</SelectItem>
+              <SelectItem value="crop">Crop</SelectItem>
+              <SelectItem value="fit">Fit</SelectItem>
+              <SelectItem value="fillBounds">FillBounds</SelectItem>
+              <SelectItem value="inside">Inside</SelectItem>
+              <SelectItem value="none">None</SelectItem>
             </SelectContent>
           </Select>
         </Field>
+        <Field label="Alpha">
+          <Input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={node.props.imageAlpha == null ? "" : String(node.props.imageAlpha)}
+            onChange={(e) => setProp("imageAlpha", e.target.value === "" ? 1 : Number(e.target.value))}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Surface") {
+    return (
+      <Section title="Surface">
+        <Field label="Tonal elevation">
+          <Input
+            type="number"
+            min={0}
+            max={5}
+            value={Number(node.props.tonalElevation ?? 1)}
+            onChange={(e) => setProp("tonalElevation", Number(e.target.value))}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "HorizontalPager") {
+    return (
+      <Section title="HorizontalPager">
+        <Field label="Current page">
+          <Input
+            type="number"
+            min={0}
+            value={Number(node.props.currentPage ?? 0)}
+            onChange={(e) => setProp("currentPage", Number(e.target.value))}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Tab" || node.type === "SegmentedButtonItem" || node.type === "DropdownMenuItem") {
+    return (
+      <Section title={node.type}>
+        <Field label="Label">
+          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+        </Field>
+        {(node.type === "Tab" || node.type === "SegmentedButtonItem") && (
+          <Field label="Selected">
+            <Switch
+              checked={Boolean(node.props.selected)}
+              onCheckedChange={(checked) => setProp("selected", Boolean(checked))}
+            />
+          </Field>
+        )}
+      </Section>
+    );
+  }
+
+  if (node.type === "NavigationDrawer" || node.type === "BottomSheet" || node.type === "DropdownMenu") {
+    return (
+      <Section title={node.type}>
+        <Field label={node.type === "DropdownMenu" ? "Trigger label" : "Title"}>
+          <Input
+            value={String(node.props.title ?? node.props.label ?? "")}
+            onChange={(e) => setProp(node.type === "DropdownMenu" ? "label" : "title", e.target.value)}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "ExposedDropdownMenu") {
+    return (
+      <Section title="ExposedDropdownMenu">
+        <Field label="Label">
+          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+        </Field>
+        <Field label="Selected value">
+          <Input value={String(node.props.value ?? "")} onChange={(e) => setProp("value", e.target.value)} />
+        </Field>
+        <Field label="Expanded (preview)">
+          <Switch
+            checked={node.props.expanded !== false}
+            onCheckedChange={(checked) => setProp("expanded", Boolean(checked))}
+          />
+        </Field>
+        <Field label="Enabled">
+          <Switch
+            checked={node.props.enabled !== false}
+            onCheckedChange={(checked) => setProp("enabled", Boolean(checked))}
+          />
+        </Field>
+        <p className="text-xs text-muted-foreground">Add DropdownMenuItem children for options.</p>
+      </Section>
+    );
+  }
+
+  if (node.type === "PullRefresh") {
+    return (
+      <Section title="PullRefresh">
+        <Field label="Refreshing">
+          <Switch
+            checked={Boolean(node.props.refreshing)}
+            onCheckedChange={(checked) => setProp("refreshing", Boolean(checked))}
+          />
+        </Field>
+        <p className="text-xs text-muted-foreground">Wrap scrollable content (e.g. LazyColumn) as children.</p>
+      </Section>
+    );
+  }
+
+  if (node.type === "SearchBar") {
+    return (
+      <Section title="SearchBar">
+        <Field label="Query">
+          <Input value={String(node.props.query ?? "")} onChange={(e) => setProp("query", e.target.value)} />
+        </Field>
+        <Field label="Placeholder">
+          <Input value={String(node.props.placeholder ?? "")} onChange={(e) => setProp("placeholder", e.target.value)} />
+        </Field>
+        <Field label="Active">
+          <Switch checked={Boolean(node.props.active)} onCheckedChange={(checked) => setProp("active", Boolean(checked))} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "DatePicker") {
+    return (
+      <Section title="DatePicker">
+        <Field label="Date (ISO)">
+          <Input value={String(node.props.date ?? "")} onChange={(e) => setProp("date", e.target.value)} />
+        </Field>
+        <Field label="Enabled">
+          <Switch checked={node.props.enabled !== false} onCheckedChange={(checked) => setProp("enabled", Boolean(checked))} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "TimePicker") {
+    return (
+      <Section title="TimePicker">
+        <Field label="Time (HH:mm)">
+          <Input value={String(node.props.time ?? "")} onChange={(e) => setProp("time", e.target.value)} />
+        </Field>
+        <Field label="Enabled">
+          <Switch checked={node.props.enabled !== false} onCheckedChange={(checked) => setProp("enabled", Boolean(checked))} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Dialog") {
+    return (
+      <Section title="AlertDialog">
+        <Field label="Title">
+          <Input value={String(node.props.title ?? "")} onChange={(e) => setProp("title", e.target.value)} />
+        </Field>
+        <Field label="Message">
+          <Input value={String(node.props.message ?? "")} onChange={(e) => setProp("message", e.target.value)} />
+        </Field>
+        <Field label="Confirm label">
+          <Input value={String(node.props.confirmLabel ?? "OK")} onChange={(e) => setProp("confirmLabel", e.target.value)} />
+        </Field>
+        <Field label="Dismiss label">
+          <Input value={String(node.props.dismissLabel ?? "Cancel")} onChange={(e) => setProp("dismissLabel", e.target.value)} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Snackbar") {
+    return (
+      <Section title="Snackbar">
+        <Field label="Message">
+          <Input value={String(node.props.message ?? "")} onChange={(e) => setProp("message", e.target.value)} />
+        </Field>
+        <Field label="Action label">
+          <Input value={String(node.props.actionLabel ?? "")} onChange={(e) => setProp("actionLabel", e.target.value)} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Badge") {
+    return (
+      <Section title="Badge">
+        <Field label="Count">
+          <Input
+            type="number"
+            min={0}
+            value={Number(node.props.count ?? 0)}
+            onChange={(e) => setProp("count", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Label (optional)">
+          <Input value={String(node.props.label ?? "")} onChange={(e) => setProp("label", e.target.value)} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Tooltip") {
+    return (
+      <Section title="Tooltip">
+        <Field label="Text">
+          <Input value={String(node.props.text ?? "")} onChange={(e) => setProp("text", e.target.value)} />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "LinearProgressIndicator") {
+    return (
+      <Section title="LinearProgressIndicator">
+        <Field label="Indeterminate">
+          <Switch
+            checked={Boolean(node.props.indeterminate)}
+            onCheckedChange={(checked) => setProp("indeterminate", Boolean(checked))}
+          />
+        </Field>
+        {!node.props.indeterminate ? (
+          <Field label="Progress (0–1)">
+            <Input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={Number(node.props.progress ?? 0.65)}
+              onChange={(e) => setProp("progress", Number(e.target.value))}
+            />
+          </Field>
+        ) : null}
+        <Field label="Color token">
+          <Select value={String(node.props.color ?? "primary")} onValueChange={(v) => v && setProp("color", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COLORS.map((color) => (
+                <SelectItem key={color} value={color}>
+                  {color}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Column" || node.type === "Row" || node.type === "LazyColumn" || node.type === "LazyRow" || node.type === "LazyVerticalGrid" || node.type === "Box") {
+    return null;
+  }
+
+  if (node.type === "Spacer") {
+    return (
+      <Section title="Spacer">
+        <Field label="Height dp">
+          <Input
+            type="number"
+            value={Number(node.props.height ?? 16)}
+            onChange={(e) => setProp("height", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Width dp">
+          <Input
+            type="number"
+            value={node.props.width == null ? "" : String(node.props.width)}
+            onChange={(e) => setProp("width", e.target.value === "" ? 0 : Number(e.target.value))}
+          />
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "CircularProgress") {
+    return (
+      <Section title="CircularProgressIndicator">
+        <Field label="Size dp">
+          <Input
+            type="number"
+            value={Number(node.props.size ?? 40)}
+            onChange={(e) => setProp("size", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Stroke width dp">
+          <Input
+            type="number"
+            value={Number(node.props.strokeWidthDp ?? 4)}
+            onChange={(e) => setProp("strokeWidthDp", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Color token">
+          <Select value={String(node.props.color ?? "primary")} onValueChange={(v) => v && setProp("color", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COLORS.map((color) => (
+                <SelectItem key={color} value={color}>
+                  {color}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "Divider") {
+    return (
+      <Section title="HorizontalDivider">
+        <Field label="Thickness dp">
+          <Input
+            type="number"
+            value={Number(node.props.thicknessDp ?? 1)}
+            onChange={(e) => setProp("thicknessDp", Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Color token">
+          <Select value={String(node.props.color ?? "outline")} onValueChange={(v) => v && setProp("color", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COLORS.map((color) => (
+                <SelectItem key={color} value={color}>
+                  {color}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </Section>
+    );
+  }
+
+  if (node.type === "NavigationBar") {
+    return (
+      <Section title="NavigationBar">
         <p className="text-xs text-muted-foreground">
-          This file is the empty-state art. Bind Image URL to an API field (item.image) and the live response replaces it.
+          Add NavigationBarItem children. Each item has label, icon, and selected state.
         </p>
-      </>
+      </Section>
+    );
+  }
+
+  if (node.type === "Scaffold") {
+    return (
+      <Section title="Scaffold">
+        <p className="text-xs text-muted-foreground">
+          Slots: topBar, rail, content, bottomBar, fab. Drop widgets into each slot on the canvas.
+        </p>
+      </Section>
     );
   }
 
@@ -1132,7 +2186,7 @@ function TypeFields({
 
   return (
     <p className="text-sm text-muted-foreground">
-      Layout containers expose padding, list binding, and children. Drop Material components into this node on the canvas.
+      Select a Material / Compose widget to edit its Attributes — matching Android Studio style properties.
     </p>
   );
 }
@@ -1269,45 +2323,265 @@ function InteractionEditor({
   );
 }
 
-function ComposeLayout({
+function ContainerAlignmentFields({
   node,
   patchNode,
 }: {
   node: UiNode;
   patchNode: (id: string, patch: Partial<UiNode>) => void;
 }) {
+  if (
+    node.type !== "Column" &&
+    node.type !== "Row" &&
+    node.type !== "LazyColumn" &&
+    node.type !== "LazyRow" &&
+    node.type !== "LazyVerticalGrid" &&
+    node.type !== "Box"
+  ) {
+    return null;
+  }
+  const isColumn = node.type === "Column" || node.type === "LazyColumn" || node.type === "LazyVerticalGrid";
+  const isRow = node.type === "Row" || node.type === "LazyRow";
+  const isBox = node.type === "Box";
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Layout alignment
+      </div>
+      {!isBox ? (
+        <>
+          <Field label={isColumn ? "Vertical arrangement" : "Horizontal arrangement"}>
+            <Select
+              value={String(node.props.arrangement ?? (isColumn ? "top" : "start"))}
+              onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, arrangement: value } })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(isColumn
+                  ? ["top", "center", "bottom", "spaceBetween", "spaceEvenly", "spaceAround"]
+                  : ["start", "center", "end", "spaceBetween", "spaceEvenly", "spaceAround"]
+                ).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={isColumn ? "Horizontal alignment" : "Vertical alignment"}>
+            <Select
+              value={String(node.props.alignment ?? (isColumn ? "start" : "center"))}
+              onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, alignment: value } })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(isColumn ? ["start", "center", "end", "stretch"] : ["top", "center", "bottom", "stretch"]).map(
+                  (value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="spacedBy (dp)">
+            <Input
+              type="number"
+              value={Number(node.props.spacedBy ?? 8)}
+              onChange={(e) =>
+                patchNode(node.id, { props: { ...node.props, spacedBy: Number(e.target.value) } })
+              }
+            />
+          </Field>
+          {node.type === "LazyVerticalGrid" ? (
+            <Field label="Columns">
+              <Input
+                type="number"
+                min={1}
+                max={6}
+                value={Number(node.props.columns ?? 2)}
+                onChange={(e) => patchNode(node.id, { props: { ...node.props, columns: Number(e.target.value) } })}
+              />
+            </Field>
+          ) : null}
+        </>
+      ) : (
+        <Field label="Content alignment">
+          <Select
+            value={String(node.props.alignment ?? "topStart")}
+            onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, alignment: value } })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[
+                "topStart",
+                "topCenter",
+                "topEnd",
+                "centerStart",
+                "center",
+                "centerEnd",
+                "bottomStart",
+                "bottomCenter",
+                "bottomEnd",
+              ].map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
+    </div>
+  );
+}
+
+function NodeApiFields({
+  node,
+  dataSources,
+  patchNode,
+}: {
+  node: UiNode;
+  dataSources: { id: string; name: string }[];
+  patchNode: (id: string, patch: Partial<UiNode>) => void;
+}) {
+  if (dataSources.length === 0) return null;
+  const selected = new Set(node.dataSourceIds ?? []);
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Component APIs
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Fetch these APIs when this widget is on screen. Screen-level APIs still apply.
+      </p>
+      {dataSources.map((source) => (
+        <label key={source.id} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={selected.has(source.id)}
+            onChange={(event) => {
+              const next = new Set(selected);
+              if (event.target.checked) next.add(source.id);
+              else next.delete(source.id);
+              patchNode(node.id, { dataSourceIds: [...next] });
+            }}
+          />
+          <span>{source.name}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function ComposeLayout({
+  node,
+  patchNode,
+  isContainer,
+}: {
+  node: UiNode;
+  patchNode: (id: string, patch: Partial<UiNode>) => void;
+  isContainer: boolean;
+}) {
   const m = node.modifiers;
+  const widthMode: SizeMode =
+    m.widthMode ?? (m.fillMaxWidth ? "fill" : m.widthDp != null ? "fixed" : "wrap");
+  const heightMode: SizeMode =
+    m.heightMode ?? (m.fillMaxHeight ? "fill" : m.heightDp != null ? "fixed" : "wrap");
+
+  const setWidthMode = (mode: SizeMode) => {
+    patchNode(node.id, {
+      modifiers: {
+        ...m,
+        widthMode: mode,
+        fillMaxWidth: mode === "fill",
+        widthDp: mode === "fixed" ? m.widthDp ?? 120 : undefined,
+      },
+    });
+  };
+  const setHeightMode = (mode: SizeMode) => {
+    patchNode(node.id, {
+      modifiers: {
+        ...m,
+        heightMode: mode,
+        fillMaxHeight: mode === "fill",
+        heightDp: mode === "fixed" ? m.heightDp ?? 48 : undefined,
+      },
+    });
+  };
+
   return (
     <div className="space-y-3 rounded-lg border p-2">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         Compose modifiers
       </div>
-      <Field label="Width dp">
-        <Input
-          type="number"
-          value={m.widthDp == null ? "" : String(m.widthDp)}
-          placeholder="wrap"
-          onChange={(e) =>
-            patchNode(node.id, { modifiers: { ...m, widthDp: e.target.value === "" ? undefined : Number(e.target.value) } })
-          }
-        />
+      <Field label="Width">
+        <Select value={widthMode} onValueChange={(value) => value && setWidthMode(value as SizeMode)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="wrap">Wrap content</SelectItem>
+            <SelectItem value="fill">Fill parent</SelectItem>
+            <SelectItem value="fixed">Fixed dp</SelectItem>
+          </SelectContent>
+        </Select>
       </Field>
-      <Field label="Height dp">
-        <Input
-          type="number"
-          value={m.heightDp == null ? "" : String(m.heightDp)}
-          placeholder="wrap"
-          onChange={(e) =>
-            patchNode(node.id, { modifiers: { ...m, heightDp: e.target.value === "" ? undefined : Number(e.target.value) } })
-          }
-        />
+      {widthMode === "fixed" ? (
+        <Field label="Width dp">
+          <Input
+            type="number"
+            value={m.widthDp == null ? "" : String(m.widthDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, widthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </Field>
+      ) : null}
+      <Field label="Height">
+        <Select value={heightMode} onValueChange={(value) => value && setHeightMode(value as SizeMode)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="wrap">Wrap content</SelectItem>
+            <SelectItem value="fill">Fill parent</SelectItem>
+            <SelectItem value="fixed">Fixed dp</SelectItem>
+          </SelectContent>
+        </Select>
       </Field>
-      <Field label="Fill height">
-        <Switch
-          checked={Boolean(m.fillMaxHeight)}
-          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, fillMaxHeight: Boolean(checked) } })}
-        />
-      </Field>
+      {heightMode === "fixed" ? (
+        <Field label="Height dp">
+          <Input
+            type="number"
+            value={m.heightDp == null ? "" : String(m.heightDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, heightDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </Field>
+      ) : null}
+      <SpacingEditor
+        label="Padding"
+        value={m.padding}
+        onChange={(padding) => patchNode(node.id, { modifiers: { ...m, padding } })}
+      />
+      <SpacingEditor
+        label="Margin"
+        value={m.margin}
+        onChange={(margin) => patchNode(node.id, { modifiers: { ...m, margin } })}
+      />
       <Field label={`Alpha ${m.alpha ?? 1}`}>
         <Slider
           min={0}
@@ -1391,6 +2665,51 @@ function ComposeLayout({
           onChange={(value) => patchNode(node.id, { modifiers: { ...m, backgroundHex: value || undefined } })}
         />
       </Field>
+      <Field label="Clickable">
+        <Switch
+          checked={Boolean(m.clickable)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, clickable: Boolean(checked) } })}
+        />
+      </Field>
+      {m.clickable ? (
+        <Field label="Ripple">
+          <Switch
+            checked={m.rippleEnabled !== false}
+            onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, rippleEnabled: Boolean(checked) } })}
+          />
+        </Field>
+      ) : null}
+      {isContainer ? (
+        <Field label="Scroll axis">
+          <Select
+            value={m.scrollAxis ?? "none"}
+            onValueChange={(value) =>
+              value && patchNode(node.id, { modifiers: { ...m, scrollAxis: value as NonNullable<typeof m.scrollAxis> } })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">none</SelectItem>
+              <SelectItem value="vertical">vertical</SelectItem>
+              <SelectItem value="horizontal">horizontal</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      ) : null}
+      <Field label="IME padding">
+        <Switch
+          checked={Boolean(m.imePadding)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, imePadding: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label="System bars padding">
+        <Switch
+          checked={Boolean(m.systemBarsPadding)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, systemBarsPadding: Boolean(checked) } })}
+        />
+      </Field>
       <Field label="Border width / token">
         <div className="flex gap-2">
           <Input
@@ -1421,16 +2740,6 @@ function ComposeLayout({
             </SelectContent>
           </Select>
         </div>
-      </Field>
-      <Field label="Weight (Row/Column)">
-        <Input
-          type="number"
-          value={m.weight == null ? "" : String(m.weight)}
-          placeholder="none"
-          onChange={(e) =>
-            patchNode(node.id, { modifiers: { ...m, weight: e.target.value === "" ? undefined : Number(e.target.value) } })
-          }
-        />
       </Field>
     </div>
   );

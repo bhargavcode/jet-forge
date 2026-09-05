@@ -41,6 +41,7 @@ export interface ScreenWire {
 
 export function collectWires(document: ScreenDocument): ScreenWire[] {
   const wires: ScreenWire[] = [];
+  const seen = new Set<string>();
   for (const screen of document.screens) {
     walk(screen.root, (node) => {
       for (const item of interactionsOf(node)) {
@@ -52,6 +53,9 @@ export function collectWires(document: ScreenDocument): ScreenWire[] {
               ? null
               : null;
         if (item.action.type === "navigate" || item.action.type === "submitForm" || item.action.type === "back" || item.action.type === "focusNode") {
+          const signature = `${screen.id}:${node.id}:${item.event}:${item.action.type}:${toScreenId ?? ""}:${item.action.nodeId ?? ""}`;
+          if (seen.has(signature)) continue;
+          seen.add(signature);
           wires.push({
             fromScreenId: screen.id,
             fromNodeId: node.id,
