@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5 as const;
+export const SCHEMA_VERSION = 10 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -6,27 +6,58 @@ export type NodeType =
   | "Row"
   | "Box"
   | "LazyColumn"
+  | "LazyRow"
+  | "LazyVerticalGrid"
+  | "Surface"
+  | "HorizontalPager"
+  | "PullRefresh"
   | "TopAppBar"
   | "NavigationBar"
   | "NavigationBarItem"
+  | "NavigationRail"
+  | "NavigationRailItem"
+  | "NavigationDrawer"
+  | "TabRow"
+  | "Tab"
   | "Card"
   | "Text"
   | "FilledButton"
   | "OutlinedButton"
   | "TextButton"
+  | "TonalButton"
+  | "ElevatedButton"
+  | "SegmentedButton"
+  | "SegmentedButtonItem"
   | "FAB"
   | "TextField"
+  | "SearchBar"
   | "Image"
   | "Icon"
   | "Chip"
   | "Switch"
   | "Checkbox"
+  | "Slider"
+  | "RadioButton"
+  | "DropdownMenu"
+  | "DropdownMenuItem"
+  | "ExposedDropdownMenu"
+  | "IconButton"
+  | "Dialog"
+  | "BottomSheet"
+  | "Snackbar"
+  | "Tooltip"
+  | "Badge"
   | "Divider"
   | "Spacer"
   | "ListItem"
-  | "CircularProgress";
+  | "CircularProgress"
+  | "LinearProgressIndicator"
+  | "DatePicker"
+  | "TimePicker";
 
-export type SlotName = "topBar" | "content" | "bottomBar" | "fab";
+export type ScrollAxis = "none" | "vertical" | "horizontal";
+
+export type SlotName = "topBar" | "content" | "bottomBar" | "fab" | "rail";
 
 export type TextStyle =
   | "displayLarge"
@@ -45,6 +76,8 @@ export type ColorToken =
   | "onPrimaryContainer"
   | "secondary"
   | "onSecondary"
+  | "secondaryContainer"
+  | "onSecondaryContainer"
   | "surface"
   | "onSurface"
   | "onSurfaceVariant"
@@ -93,6 +126,11 @@ export type VisibleWhen = "always" | "loading" | "error" | "ready" | "empty" | "
 export type CanvasState = "auto" | VisibleWhen;
 
 export type WorkspaceMode = "design" | "prototype";
+export type CanvasViewMode = "preview" | "blueprint";
+
+export type PreviewDevicePreset = import("./preview-config").PreviewDevicePreset;
+export type PreviewUiMode = import("./preview-config").PreviewUiMode;
+export type PreviewConfig = import("./preview-config").PreviewConfig;
 
 export type ActionType = "none" | "navigate" | "back" | "submitForm" | "retry" | "openUrl" | "callApi" | "focusNode";
 
@@ -117,23 +155,67 @@ export interface PaddingSpec {
   bottom?: number;
 }
 
+export interface MarginSpec {
+  all?: number;
+  start?: number;
+  top?: number;
+  end?: number;
+  bottom?: number;
+}
+
+export type HorizontalConstraint = "start" | "center" | "end" | "stretch";
+export type VerticalConstraint = "top" | "center" | "bottom" | "stretch";
+export type SizeMode = "wrap" | "fill" | "fixed";
+
+/** Flow-layout alignment hints for Column/Row/Box children (not ConstraintLayout). */
+export interface ConstraintSpec {
+  horizontal?: HorizontalConstraint;
+  vertical?: VerticalConstraint;
+  margin?: MarginSpec;
+}
+
 export interface ModifierSpec {
   fillMaxWidth?: boolean;
   fillMaxHeight?: boolean;
+  /** Convenience: both axes fill (Compose fillMaxSize). */
+  fillMaxSize?: boolean;
+  widthMode?: SizeMode;
+  heightMode?: SizeMode;
   widthDp?: number;
   heightDp?: number;
+  minWidthDp?: number;
+  maxWidthDp?: number;
+  minHeightDp?: number;
+  maxHeightDp?: number;
+  /** Width / height aspect ratio, e.g. 1.5. */
+  aspectRatio?: number;
   weight?: number;
   padding?: PaddingSpec;
+  margin?: MarginSpec;
   clip?: "none" | "extraSmall" | "small" | "medium" | "large" | "full";
   alpha?: number;
   rotationDeg?: number;
   offsetXDp?: number;
   offsetYDp?: number;
   elevationDp?: number;
+  zIndex?: number;
   backgroundToken?: ColorToken;
   backgroundHex?: string;
   borderWidthDp?: number;
   borderToken?: ColorToken;
+  /** Modifier.clickable — show ripple / pointer affordance in design preview. */
+  clickable?: boolean;
+  rippleEnabled?: boolean;
+  scrollAxis?: ScrollAxis;
+  imePadding?: boolean;
+  systemBarsPadding?: boolean;
+}
+
+export interface ComponentDef {
+  id: string;
+  name: string;
+  root: UiNode;
+  description?: string;
 }
 
 export type DrawableType = "none" | "color" | "gradient" | "image";
@@ -146,6 +228,7 @@ export interface DrawableSpec {
   endHex?: string;
   angle?: number;
   url?: string;
+  assetId?: string;
   tintToken?: ColorToken;
 }
 
@@ -224,12 +307,17 @@ export interface UiNode {
   type: NodeType;
   props: Record<string, string | number | boolean | null>;
   modifiers: ModifierSpec;
+  constraints?: ConstraintSpec;
   animation?: EnterAnimation;
   drawable?: DrawableSpec;
   bindings?: Record<string, string>;
   children?: UiNode[];
   slot?: SlotName;
   itemBinding?: string;
+  /** API sources fetched when this node (or its screen) is shown. */
+  dataSourceIds?: string[];
+  /** Reference to a reusable component master. */
+  refComponentId?: string;
   /** Prefer `interactions` with event `tap`. Kept so published v2 documents still run. */
   onClick?: ClickAction;
   interactions?: Interaction[];
@@ -287,6 +375,7 @@ export interface ScreenDocument {
   screens: ScreenDef[];
   startScreenId: string;
   root: UiNode;
+  components?: ComponentDef[];
   assets?: AssetRef[];
   dataModels?: KotlinDataModel[];
   activeModelId?: string;

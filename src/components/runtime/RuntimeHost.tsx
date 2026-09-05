@@ -69,7 +69,7 @@ export function RuntimeHost({
     async (id: string, nextRoute: BindingScope, nextForms: Record<string, Record<string, string>>) => {
       const current = documentRef.current;
       const target = currentScreen(current, id);
-      const ids = sourcesForScreen(current.dataSources, target);
+      const ids = sourcesForScreen(current.dataSources, target, target.root);
       const sources = current.dataSources.filter((source) => ids.includes(source.id));
       const mockMap = Object.fromEntries(current.dataSources.map((source) => [source.id, source.mock ?? {}]));
       if (sources.length === 0) {

@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { Palette } from "./Palette";
 import { Layers } from "./Layers";
+import { ResourcesPanel } from "./ResourcesPanel";
 import { Inspector } from "./Inspector";
 import { DataSourcesPanel } from "./DataSourcesPanel";
 import { KotlinModelsPanel } from "./KotlinModelsPanel";
@@ -28,12 +29,14 @@ import { HorizontalResize, VerticalResize } from "./PaneSplit";
 import { cn } from "@/lib/utils";
 import { RuntimeHost } from "@/components/runtime/RuntimeHost";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useDesigner } from "@/lib/store";
 import { CATALOG } from "@/lib/catalog";
 import { currentRoot } from "@/lib/document";
 import { acceptsChild, findNode, findParent, hostIdFromVirtual, isContainer, isVirtualNodeId } from "@/lib/tree";
 import type { NodeType, SlotName } from "@/lib/schema";
 import { toast } from "sonner";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 const collisionDetection: CollisionDetection = (args) => {
   const activeId = String(args.active.id);
@@ -96,6 +99,7 @@ export function Designer() {
   const setLayout = useDesigner((s) => s.setLayout);
   const [activeDrag, setActiveDrag] = useState<{ type: NodeType; label: string } | null>(null);
   const [mobileTab, setMobileTab] = useState("canvas");
+  const [leftTab, setLeftTab] = useState<"components" | "resources" | "layers">("components");
   const hydrated = useSyncExternalStore(
     (onChange) => useDesigner.persist.onFinishHydration(onChange),
     () => useDesigner.persist.hasHydrated(),
@@ -245,17 +249,25 @@ export function Designer() {
             className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-r bg-background md:flex"
             style={{ width: layout.leftW }}
           >
-            <div className="min-h-0 overflow-hidden" style={{ flex: `${layout.leftSplit} 1 0` }}>
-              <Palette onAdd={addToSelection} />
+            <div className="shrink-0 border-b px-2 pt-2">
+              <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as typeof leftTab)}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="components" className="flex-1 text-xs">
+                    Components
+                  </TabsTrigger>
+                  <TabsTrigger value="resources" className="flex-1 text-xs">
+                    Resources
+                  </TabsTrigger>
+                  <TabsTrigger value="layers" className="flex-1 text-xs">
+                    Layers
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <HorizontalResize
-              onDelta={(dy) => {
-                const total = 600;
-                setLayout({ leftSplit: layout.leftSplit + dy / total });
-              }}
-            />
-            <div className="min-h-0 overflow-hidden" style={{ flex: `${1 - layout.leftSplit} 1 0` }}>
-              <Layers />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {leftTab === "components" ? <Palette onAdd={addToSelection} /> : null}
+              {leftTab === "resources" ? <ResourcesPanel /> : null}
+              {leftTab === "layers" ? <Layers /> : null}
             </div>
           </aside>
           <VerticalResize className="hidden md:block" onDelta={(dx) => setLayout({ leftW: layout.leftW + dx })} />
@@ -320,34 +332,66 @@ export function Designer() {
             className="hidden min-h-0 shrink-0 flex-col overflow-hidden border-l bg-background lg:flex"
             style={{ width: layout.rightW }}
           >
-            <div className="min-h-0 overflow-hidden bg-background" style={{ flex: `${layout.rightSplit} 1 0` }}>
+            <div
+              className="min-h-0 overflow-hidden bg-background"
+              style={{
+                flex: layout.rightBottomCollapsed ? "1 1 0" : `${layout.rightSplit} 1 0`,
+              }}
+            >
               <Inspector />
             </div>
-            <HorizontalResize
-              onDelta={(dy) => {
-                setLayout({ rightSplit: layout.rightSplit + dy / 600 });
-              }}
-            />
-            <div className="flex min-h-0 flex-col overflow-hidden bg-background" style={{ flex: `${1 - layout.rightSplit} 1 0` }}>
-              <Tabs defaultValue="request" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden">
-                <div className="shrink-0 border-b px-2 pt-2">
-                  <TabsList className="w-full">
-                    <TabsTrigger value="request" className="flex-1">
-                      Request
-                    </TabsTrigger>
-                    <TabsTrigger value="models" className="flex-1">
-                      Models
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent value="request" className="mt-0 min-h-0 flex-1 overflow-hidden">
-                  <DataSourcesPanel />
-                </TabsContent>
-                <TabsContent value="models" className="mt-0 min-h-0 flex-1 overflow-hidden">
-                  <KotlinModelsPanel />
-                </TabsContent>
-              </Tabs>
+            <div className="flex shrink-0 items-center gap-1 border-y bg-muted/30 px-1">
+              <HorizontalResize
+                className={cn("h-1.5 flex-1", layout.rightBottomCollapsed && "pointer-events-none opacity-40")}
+                onDelta={(dy) => {
+                  if (layout.rightBottomCollapsed) return;
+                  setLayout({ rightSplit: layout.rightSplit + dy / 600 });
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+                aria-expanded={!layout.rightBottomCollapsed}
+                aria-label={layout.rightBottomCollapsed ? "Expand Request and Models" : "Collapse Request and Models"}
+                onClick={() =>
+                  setLayout({ rightBottomCollapsed: !layout.rightBottomCollapsed })
+                }
+              >
+                Request | Models
+                {layout.rightBottomCollapsed ? (
+                  <ChevronUp className="size-3.5" />
+                ) : (
+                  <ChevronDown className="size-3.5" />
+                )}
+              </Button>
             </div>
+            {!layout.rightBottomCollapsed ? (
+              <div
+                className="flex min-h-0 flex-col overflow-hidden bg-background"
+                style={{ flex: `${1 - layout.rightSplit} 1 0` }}
+              >
+                <Tabs defaultValue="request" className="flex h-full min-h-0 flex-col gap-0 overflow-hidden">
+                  <div className="shrink-0 border-b px-2 pt-2">
+                    <TabsList className="w-full">
+                      <TabsTrigger value="request" className="flex-1">
+                        Request
+                      </TabsTrigger>
+                      <TabsTrigger value="models" className="flex-1">
+                        Models
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                  <TabsContent value="request" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                    <DataSourcesPanel />
+                  </TabsContent>
+                  <TabsContent value="models" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                    <KotlinModelsPanel />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            ) : null}
           </aside>
         </div>
       </div>

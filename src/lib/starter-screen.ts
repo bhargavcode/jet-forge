@@ -1,6 +1,7 @@
 import { SAMPLE_ARTICLE_KOTLIN, SAMPLE_NEWS_KOTLIN, parseKotlinDataClass } from "./kotlin-model";
 import { normalizeDocument } from "./document";
 import type { ClickAction, ScreenDocument, UiNode } from "./schema";
+import { createWidgetGalleryScreen } from "./widget-gallery-screen";
 
 const fade = (delay = 0) => ({ type: "fade" as const, durationMs: 280, delayMs: delay, staggerMs: 40 });
 const none = { type: "none" as const, durationMs: 0, delayMs: 0 };
@@ -459,6 +460,7 @@ export function createStarterScreen(): ScreenDocument {
         flowX: 896,
         flowY: 48,
       },
+      createWidgetGalleryScreen(),
     ],
     root: headlinesRoot,
     dataModels: [
