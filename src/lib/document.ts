@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import type { Interaction, ScreenDef, ScreenDocument, UiNode } from "./schema";
 import { SCHEMA_VERSION } from "./schema";
 import { isFlowLayoutParent, stripPeerConstraints } from "./layout";
@@ -83,13 +84,13 @@ function sanitizeModifiers(
  * Free-drag views parked as Scaffold siblings (no slot) are dropped by runtimes that only
  * read topBar/content/bottomBar. Keep them in a content Box overlay so publish matches canvas.
  */
-function normalizeScaffoldChildren(children: UiNode[] | undefined): UiNode[] | undefined {
+function normalizeScaffoldChildren(children: UiNode[] | undefined, seen: Set<string>): UiNode[] | undefined {
   if (!children?.length) return children;
   const chrome = new Set(["topBar", "bottomBar", "fab", "rail"]);
   const slotted = children.filter((child) => child.slot && chrome.has(child.slot));
   const content = children.find((child) => child.slot === "content");
   const orphans = children.filter((child) => child !== content && !(child.slot && chrome.has(child.slot)));
-  if (!orphans.length) return children.map((child) => normalizeNode(child));
+  if (!orphans.length) return children.map((child) => normalizeNode(child, undefined, seen));
 
   const contentKids: UiNode[] = [
     ...(content
@@ -116,7 +117,7 @@ function normalizeScaffoldChildren(children: UiNode[] | undefined): UiNode[] | u
     slot: "content",
     children: contentKids,
   };
-  return [...slotted.map((child) => normalizeNode(child)), normalizeNode(wrap)];
+  return [...slotted.map((child) => normalizeNode(child, undefined, seen)), normalizeNode(wrap, undefined, seen)];
 }
 
 function scaffoldReservesChromeSpace(children: UiNode[] | undefined): boolean {
@@ -168,20 +169,41 @@ function collapseEmptyScaffoldChrome(node: UiNode): UiNode {
   };
 }
 
-function normalizeNode(node: UiNode, parent?: UiNode): UiNode {
+function childList(children: UiNode[] | undefined): UiNode[] | undefined {
+  if (!children) return undefined;
+  if (!Array.isArray(children)) return undefined;
+  return children.filter((child): child is UiNode => Boolean(child) && typeof child === "object");
+}
+
+function uniqueNodeId(current: string | undefined, seen: Set<string>): string {
+  const trimmed = typeof current === "string" ? current.trim() : "";
+  if (trimmed && !seen.has(trimmed)) {
+    seen.add(trimmed);
+    return trimmed;
+  }
+  let next = nanoid(8);
+  while (seen.has(next)) next = nanoid(8);
+  seen.add(next);
+  return next;
+}
+
+function normalizeNode(node: UiNode, parent?: UiNode, seen: Set<string> = new Set()): UiNode {
+  const id = uniqueNodeId(node.id, seen);
   let interactions = node.interactions;
   if ((!interactions || interactions.length === 0) && node.onClick && node.onClick.type !== "none") {
     interactions = [{ event: "tap", action: node.onClick } satisfies Interaction];
   }
   const tap = interactions?.find((item) => item.event === "tap")?.action;
   let constraints = stripPeerConstraints(node.constraints);
+  const rawChildren = childList(node.children);
   let children =
     node.type === "Scaffold"
-      ? normalizeScaffoldChildren(node.children)
-      : node.children?.map((child) => normalizeNode(child, node));
+      ? normalizeScaffoldChildren(rawChildren, seen)
+      : rawChildren?.map((child) => normalizeNode(child, node, seen));
 
   let next: UiNode = {
     ...node,
+    id,
     constraints,
     modifiers: sanitizeModifiers(node.modifiers ?? {}, parent),
     interactions,
@@ -196,7 +218,6 @@ function normalizeNode(node: UiNode, parent?: UiNode): UiNode {
       next = {
         ...next,
         modifiers: sanitizeModifiers(next.modifiers ?? {}, parent),
-        children: next.children?.map((child) => normalizeNode(child, next)),
       };
     }
   }

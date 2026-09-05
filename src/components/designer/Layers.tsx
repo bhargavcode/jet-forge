@@ -159,9 +159,9 @@ function LayerRow({
       </div>
       {!isCollapsed && children.length ? (
         <SortableContext items={children.map((child) => `layer-${child.id}`)} strategy={verticalListSortingStrategy}>
-          {children.map((child) => (
+          {children.map((child, index) => (
             <LayerRow
-              key={child.id}
+              key={`${child.id}#${index}`}
               node={child}
               depth={depth + 1}
               parentType={node.type}

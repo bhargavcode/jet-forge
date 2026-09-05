@@ -401,7 +401,7 @@ export function ComposeNode({
   const renderChildren = (childScope: BindingScope, extraIndex = 0) =>
     children.map((child, index) => (
       <ComposeNode
-        key={child.id}
+        key={`${child.id}#${index}`}
         node={child}
         scope={childScope}
         selectedId={selectedId}
@@ -732,7 +732,7 @@ export function ComposeNode({
         <div className="mt-2 flex justify-center gap-1.5">
           {(children.length ? children : [{ id: "p0" } as UiNode]).map((child, index) => (
             <span
-              key={child.id}
+              key={`${child.id}#${index}`}
               className={cn(
                 "size-2 rounded-full",
                 index === currentPage ? "bg-[var(--md-primary)]" : "bg-[var(--md-outline-variant)]",
@@ -776,14 +776,15 @@ export function ComposeNode({
     return wrap(
       <div className="flex border-b border-[var(--md-outline-variant)]">
         {children.length
-          ? children.map((child) => (
+          ? children.map((child, index) => (
               <ComposeNode
-                key={child.id}
+                key={`${child.id}#${index}`}
                 node={child}
                 scope={scope}
                 selectedId={selectedId}
                 onSelect={onSelect}
                 interactive={interactive}
+                parentType={node.type}
               />
             ))
           : interactive
@@ -815,14 +816,15 @@ export function ComposeNode({
     return wrap(
       <div className="inline-flex rounded-full border border-[var(--md-outline)] p-1">
         {children.length
-          ? children.map((child) => (
+          ? children.map((child, index) => (
               <ComposeNode
-                key={child.id}
+                key={`${child.id}#${index}`}
                 node={child}
                 scope={scope}
                 selectedId={selectedId}
                 onSelect={onSelect}
                 interactive={interactive}
+                parentType={node.type}
               />
             ))
           : interactive
@@ -860,14 +862,15 @@ export function ComposeNode({
         </div>
         <div className="mt-1 min-w-[160px] rounded-lg border border-[var(--md-outline-variant)] bg-[var(--md-surface-container)] py-1 shadow-md">
           {children.length
-            ? children.map((child) => (
+            ? children.map((child, index) => (
                 <ComposeNode
-                  key={child.id}
+                  key={`${child.id}#${index}`}
                   node={child}
                   scope={scope}
                   selectedId={selectedId}
                   onSelect={onSelect}
                   interactive={interactive}
+                  parentType={node.type}
                 />
               ))
             : interactive
@@ -1560,14 +1563,15 @@ export function ComposeNode({
     return wrap(
       <div className="relative inline-flex w-auto">
         {children.length ? (
-          children.map((child) => (
+          children.map((child, index) => (
             <ComposeNode
-              key={child.id}
+              key={`${child.id}#${index}`}
               node={child}
               scope={scope}
               selectedId={selectedId}
               onSelect={onSelect}
               interactive={interactive}
+              parentType={node.type}
             />
           ))
         ) : (
@@ -1591,14 +1595,15 @@ export function ComposeNode({
           {text}
         </span>
         {children.length ? (
-          children.map((child) => (
+          children.map((child, index) => (
             <ComposeNode
-              key={child.id}
+              key={`${child.id}#${index}`}
               node={child}
               scope={scope}
               selectedId={selectedId}
               onSelect={onSelect}
               interactive={interactive}
+              parentType={node.type}
             />
           ))
         ) : (
