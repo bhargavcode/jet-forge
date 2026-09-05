@@ -1480,8 +1480,8 @@ export function ComposeNode({
         <div className="mb-2 text-[12px] font-medium uppercase tracking-wider text-[var(--md-on-surface-variant)]">Date</div>
         <div className="text-[22px] text-[var(--md-on-surface)]">{date}</div>
         <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] text-[var(--md-on-surface-variant)]">
-          {["S", "M", "T", "W", "T", "F", "S"].map((d) => (
-            <span key={d}>{d}</span>
+          {["S", "M", "T", "W", "T", "F", "S"].map((d, index) => (
+            <span key={`dow-${index}`}>{d}</span>
           ))}
           {Array.from({ length: 14 }, (_, i) => (
             <span
