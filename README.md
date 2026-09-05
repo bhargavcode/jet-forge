@@ -33,7 +33,7 @@ The KMP interpreter lives in **its own repository**: [bhargavcode/jetforge-kmp](
 - Design Material 3 screens, including **multiple routes** (Headlines → Article → Search)
 - **Undo / Redo** (toolbar + Ctrl/Cmd+Z, Shift+Z / Y) for document edits
 - **Resizable panes** — drag the splitters between Components, Layers, canvas, Properties, and Request
-- Widget **Compose modifiers**: size, padding, clip, alpha, offset, rotation, elevation, surface color / hex, border, weight
+- Widget **Compose modifiers** matching Jetpack Compose: Column/Row `verticalArrangement` / `horizontalAlignment` (and the Row pair), `Arrangement.spacedBy`, child `weight` / `align` / `alignBy`, fill fractions, wrapContent, required sizes, widthIn/heightIn, aspectRatio, scroll enabled/reverse, background/border/padding/offset/clip/shadow, `graphicsLayer`, clickable / combinedClickable / selectable / toggleable, and semantics
 - **Drawables**: solid color, gradient, or image background — these paint the **widget surface** (button, chip, field, card), not a hidden layer behind the default fill
 - **Text + container properties** on Button, Chip, and TextField: typography, text color (token or hex), alignment, weight, font size, max lines, plus enabled / leading icon
 - **Drag widgets** on the canvas or in Layers to place them above or below another view — grab the purple handle or the widget itself; a ghost follows the pointer

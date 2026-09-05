@@ -6,6 +6,7 @@ import { bindableComposeProps } from "@/lib/model";
 import { bindPathsForModel } from "@/lib/kotlin-model";
 import type {
   ActionType,
+  AlignmentName,
   AnimationEasing,
   AnimationRepeat,
   ColorToken,
@@ -13,6 +14,7 @@ import type {
   EnterAnimationType,
   IconName,
   Interaction,
+  ModifierSpec,
   PaddingSpec,
   TextStyle,
   TouchEvent,
@@ -21,7 +23,23 @@ import type {
   VisibleWhen,
 } from "@/lib/schema";
 import type { VisibleIfOp } from "@/lib/schema";
-import { TOUCH_EVENTS } from "@/lib/schema";
+import {
+  ALIGN_BY_VALUES,
+  BOX_ALIGNMENTS,
+  COLUMN_ALIGNMENTS,
+  COLUMN_ARRANGEMENTS,
+  ROW_ALIGNMENTS,
+  ROW_ARRANGEMENTS,
+  TOUCH_EVENTS,
+} from "@/lib/schema";
+import {
+  boxAlignment,
+  columnAlignment,
+  columnArrangement,
+  patchContainerProps,
+  rowAlignment,
+  rowArrangement,
+} from "@/lib/compose-params";
 import { interactionsOf } from "@/lib/interactions";
 import {
   defaultTextToken,
@@ -34,7 +52,7 @@ import { AssetUpload } from "./AssetUpload";
 import { ModelBrowser } from "./ModelBrowser";
 import { useDesigner } from "@/lib/store";
 import { currentRoot } from "@/lib/document";
-import { findNode, isContainer } from "@/lib/tree";
+import { findNode, findParent, isContainer } from "@/lib/tree";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -427,6 +445,7 @@ export function Inspector() {
         <TabsContent value="props" className="mt-0 space-y-4 p-3">
           <TypeFields node={node} setProp={setProp} />
           <ContainerAlignmentFields node={node} patchNode={patchNode} />
+          <ScopeModifierFields node={node} parent={findParent(root, node.id)} patchNode={patchNode} />
           <NodeApiFields node={node} dataSources={screen.dataSources} patchNode={patchNode} />
           <ComposeLayout node={node} patchNode={patchNode} isContainer={isContainer(node.type)} />
           <DrawableFields node={node} patchNode={patchNode} />
@@ -2323,6 +2342,14 @@ function InteractionEditor({
   );
 }
 
+function setNodeProps(
+  node: UiNode,
+  patchNode: (id: string, patch: Partial<UiNode>) => void,
+  next: Record<string, string | number | boolean | null>,
+) {
+  patchNode(node.id, { props: patchContainerProps(node, next) });
+}
+
 function ContainerAlignmentFields({
   node,
   patchNode,
@@ -2341,62 +2368,89 @@ function ContainerAlignmentFields({
     return null;
   }
   const isColumn = node.type === "Column" || node.type === "LazyColumn" || node.type === "LazyVerticalGrid";
-  const isRow = node.type === "Row" || node.type === "LazyRow";
   const isBox = node.type === "Box";
   return (
     <div className="space-y-3 rounded-lg border p-2">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Layout alignment
+        {node.type} parameters
       </div>
+      <p className="text-[11px] leading-5 text-muted-foreground">
+        Matches Jetpack Compose: <code className="font-mono">modifier</code>, arrangement, alignment, and{" "}
+        <code className="font-mono">content</code> (children below).
+      </p>
       {!isBox ? (
         <>
-          <Field label={isColumn ? "Vertical arrangement" : "Horizontal arrangement"}>
+          <Field label={isColumn ? "verticalArrangement" : "horizontalArrangement"}>
             <Select
-              value={String(node.props.arrangement ?? (isColumn ? "top" : "start"))}
-              onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, arrangement: value } })}
+              value={isColumn ? columnArrangement(node.props) : rowArrangement(node.props)}
+              onValueChange={(value) => {
+                if (!value) return;
+                setNodeProps(
+                  node,
+                  patchNode,
+                  isColumn ? { verticalArrangement: value } : { horizontalArrangement: value },
+                );
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(isColumn
-                  ? ["top", "center", "bottom", "spaceBetween", "spaceEvenly", "spaceAround"]
-                  : ["start", "center", "end", "spaceBetween", "spaceEvenly", "spaceAround"]
-                ).map((value) => (
+                {(isColumn ? COLUMN_ARRANGEMENTS : ROW_ARRANGEMENTS).map((value) => (
                   <SelectItem key={value} value={value}>
-                    {value}
+                    Arrangement.{value}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
-          <Field label={isColumn ? "Horizontal alignment" : "Vertical alignment"}>
+          <Field label={isColumn ? "horizontalAlignment" : "verticalAlignment"}>
             <Select
-              value={String(node.props.alignment ?? (isColumn ? "start" : "center"))}
-              onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, alignment: value } })}
+              value={isColumn ? columnAlignment(node.props) : rowAlignment(node.props)}
+              onValueChange={(value) => {
+                if (!value) return;
+                setNodeProps(
+                  node,
+                  patchNode,
+                  isColumn ? { horizontalAlignment: value } : { verticalAlignment: value },
+                );
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(isColumn ? ["start", "center", "end", "stretch"] : ["top", "center", "bottom", "stretch"]).map(
-                  (value) => (
-                    <SelectItem key={value} value={value}>
-                      {value}
-                    </SelectItem>
-                  ),
-                )}
+                {(isColumn ? COLUMN_ALIGNMENTS : ROW_ALIGNMENTS).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    Alignment.{value}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
-          <Field label="spacedBy (dp)">
+          <Field label="Arrangement.spacedBy (dp)">
             <Input
               type="number"
               value={Number(node.props.spacedBy ?? 8)}
-              onChange={(e) =>
-                patchNode(node.id, { props: { ...node.props, spacedBy: Number(e.target.value) } })
-              }
+              onChange={(e) => setNodeProps(node, patchNode, { spacedBy: Number(e.target.value) })}
             />
+          </Field>
+          <Field label="spacedBy alignment">
+            <Select
+              value={String(node.props.spacedByAlignment ?? (isColumn ? "Top" : "Start"))}
+              onValueChange={(value) => value && setNodeProps(node, patchNode, { spacedByAlignment: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(isColumn ? COLUMN_ALIGNMENTS : ROW_ALIGNMENTS).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    Alignment.{value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           {node.type === "LazyVerticalGrid" ? (
             <Field label="Columns">
@@ -2405,40 +2459,129 @@ function ContainerAlignmentFields({
                 min={1}
                 max={6}
                 value={Number(node.props.columns ?? 2)}
-                onChange={(e) => patchNode(node.id, { props: { ...node.props, columns: Number(e.target.value) } })}
+                onChange={(e) => setNodeProps(node, patchNode, { columns: Number(e.target.value) })}
               />
             </Field>
           ) : null}
         </>
       ) : (
-        <Field label="Content alignment">
+        <Field label="contentAlignment">
           <Select
-            value={String(node.props.alignment ?? "topStart")}
-            onValueChange={(value) => value && patchNode(node.id, { props: { ...node.props, alignment: value } })}
+            value={boxAlignment(node.props)}
+            onValueChange={(value) => value && setNodeProps(node, patchNode, { contentAlignment: value })}
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[
-                "topStart",
-                "topCenter",
-                "topEnd",
-                "centerStart",
-                "center",
-                "centerEnd",
-                "bottomStart",
-                "bottomCenter",
-                "bottomEnd",
-              ].map((value) => (
+              {BOX_ALIGNMENTS.map((value) => (
                 <SelectItem key={value} value={value}>
-                  {value}
+                  Alignment.{value}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
       )}
+    </div>
+  );
+}
+
+function ScopeModifierFields({
+  node,
+  parent,
+  patchNode,
+}: {
+  node: UiNode;
+  parent: UiNode | null;
+  patchNode: (id: string, patch: Partial<UiNode>) => void;
+}) {
+  if (!parent) return null;
+  const isColumn = parent.type === "Column" || parent.type === "LazyColumn" || parent.type === "LazyVerticalGrid";
+  const isRow = parent.type === "Row" || parent.type === "LazyRow";
+  const isBox = parent.type === "Box";
+  if (!isColumn && !isRow && !isBox) return null;
+  const m = node.modifiers;
+  const alignOptions = isColumn ? COLUMN_ALIGNMENTS : isRow ? ROW_ALIGNMENTS : BOX_ALIGNMENTS;
+  const setMod = (patch: Partial<ModifierSpec>) => patchNode(node.id, { modifiers: { ...m, ...patch } });
+  return (
+    <div className="space-y-3 rounded-lg border p-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {parent.type}Scope modifiers
+      </div>
+      <p className="text-[11px] leading-5 text-muted-foreground">
+        Child-level Compose modifiers for a {parent.type} parent: weight, align
+        {isRow ? ", alignBy, alignByBaseline" : ""}.
+      </p>
+      {(isColumn || isRow) && (
+        <>
+          <Field label="Modifier.weight">
+            <Input
+              type="number"
+              min={0}
+              step={0.1}
+              value={m.weight == null ? "" : String(m.weight)}
+              placeholder="none"
+              onChange={(e) =>
+                setMod({ weight: e.target.value === "" ? undefined : Number(e.target.value) })
+              }
+            />
+          </Field>
+          {m.weight != null ? (
+            <Field label="weight fill">
+              <Switch checked={m.weightFill !== false} onCheckedChange={(checked) => setMod({ weightFill: Boolean(checked) })} />
+            </Field>
+          ) : null}
+        </>
+      )}
+      <Field label="Modifier.align">
+        <Select
+          value={m.align ?? "none"}
+          onValueChange={(value) => setMod({ align: value === "none" ? undefined : (value as AlignmentName) })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">none</SelectItem>
+            {alignOptions.map((value) => (
+              <SelectItem key={value} value={value}>
+                Alignment.{value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {isRow ? (
+        <>
+          <Field label="Modifier.alignBy">
+            <Select
+              value={m.alignBy ?? "none"}
+              onValueChange={(value) =>
+                setMod({ alignBy: value === "none" ? undefined : (value as NonNullable<ModifierSpec["alignBy"]>) })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                {ALIGN_BY_VALUES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Modifier.alignByBaseline">
+            <Switch
+              checked={Boolean(m.alignByBaseline)}
+              onCheckedChange={(checked) => setMod({ alignByBaseline: Boolean(checked) })}
+            />
+          </Field>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -2572,6 +2715,256 @@ function ComposeLayout({
           />
         </Field>
       ) : null}
+      <Field label="fillMaxWidth fraction">
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={m.fillMaxWidthFraction == null ? "" : String(m.fillMaxWidthFraction)}
+          placeholder="1"
+          onChange={(e) =>
+            patchNode(node.id, {
+              modifiers: {
+                ...m,
+                fillMaxWidthFraction: e.target.value === "" ? undefined : Number(e.target.value),
+              },
+            })
+          }
+        />
+      </Field>
+      <Field label="fillMaxHeight fraction">
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={m.fillMaxHeightFraction == null ? "" : String(m.fillMaxHeightFraction)}
+          placeholder="1"
+          onChange={(e) =>
+            patchNode(node.id, {
+              modifiers: {
+                ...m,
+                fillMaxHeightFraction: e.target.value === "" ? undefined : Number(e.target.value),
+              },
+            })
+          }
+        />
+      </Field>
+      <Field label="fillMaxSize">
+        <Switch
+          checked={Boolean(m.fillMaxSize)}
+          onCheckedChange={(checked) =>
+            patchNode(node.id, {
+              modifiers: {
+                ...m,
+                fillMaxSize: Boolean(checked),
+                fillMaxWidth: Boolean(checked) || m.fillMaxWidth,
+                fillMaxHeight: Boolean(checked) || m.fillMaxHeight,
+              },
+            })
+          }
+        />
+      </Field>
+      {m.fillMaxSize ? (
+        <Field label="fillMaxSize fraction">
+          <Input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={m.fillMaxSizeFraction == null ? "" : String(m.fillMaxSizeFraction)}
+            placeholder="1"
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: {
+                  ...m,
+                  fillMaxSizeFraction: e.target.value === "" ? undefined : Number(e.target.value),
+                },
+              })
+            }
+          />
+        </Field>
+      ) : null}
+      <Field label="Modifier.size (dp)">
+        <Input
+          type="number"
+          value={m.sizeDp == null ? "" : String(m.sizeDp)}
+          placeholder="none"
+          onChange={(e) =>
+            patchNode(node.id, {
+              modifiers: { ...m, sizeDp: e.target.value === "" ? undefined : Number(e.target.value) },
+            })
+          }
+        />
+      </Field>
+      <Field label="widthIn min / max">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            placeholder="min"
+            value={m.minWidthDp == null ? "" : String(m.minWidthDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, minWidthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+          <Input
+            type="number"
+            placeholder="max"
+            value={m.maxWidthDp == null ? "" : String(m.maxWidthDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, maxWidthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="heightIn min / max">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            placeholder="min"
+            value={m.minHeightDp == null ? "" : String(m.minHeightDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, minHeightDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+          <Input
+            type="number"
+            placeholder="max"
+            value={m.maxHeightDp == null ? "" : String(m.maxHeightDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, maxHeightDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="requiredWidth / Height">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            placeholder="width"
+            value={m.requiredWidthDp == null ? "" : String(m.requiredWidthDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, requiredWidthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+          <Input
+            type="number"
+            placeholder="height"
+            value={m.requiredHeightDp == null ? "" : String(m.requiredHeightDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, requiredHeightDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="requiredSize (dp)">
+        <Input
+          type="number"
+          value={m.requiredSizeDp == null ? "" : String(m.requiredSizeDp)}
+          placeholder="none"
+          onChange={(e) =>
+            patchNode(node.id, {
+              modifiers: { ...m, requiredSizeDp: e.target.value === "" ? undefined : Number(e.target.value) },
+            })
+          }
+        />
+      </Field>
+      <Field label="defaultMinSize W / H">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            placeholder="minW"
+            value={m.defaultMinWidthDp == null ? "" : String(m.defaultMinWidthDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, defaultMinWidthDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+          <Input
+            type="number"
+            placeholder="minH"
+            value={m.defaultMinHeightDp == null ? "" : String(m.defaultMinHeightDp)}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, defaultMinHeightDp: e.target.value === "" ? undefined : Number(e.target.value) },
+              })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="aspectRatio">
+        <Input
+          type="number"
+          min={0}
+          step={0.1}
+          value={m.aspectRatio == null ? "" : String(m.aspectRatio)}
+          placeholder="none"
+          onChange={(e) =>
+            patchNode(node.id, {
+              modifiers: { ...m, aspectRatio: e.target.value === "" ? undefined : Number(e.target.value) },
+            })
+          }
+        />
+      </Field>
+      {m.aspectRatio != null ? (
+        <Field label="matchHeightConstraintsFirst">
+          <Switch
+            checked={Boolean(m.aspectRatioMatchHeightFirst)}
+            onCheckedChange={(checked) =>
+              patchNode(node.id, { modifiers: { ...m, aspectRatioMatchHeightFirst: Boolean(checked) } })
+            }
+          />
+        </Field>
+      ) : null}
+      <Field label="wrapContentSize">
+        <Switch
+          checked={Boolean(m.wrapContentSize)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, wrapContentSize: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label="wrapContentWidth">
+        <Switch
+          checked={Boolean(m.wrapContentWidth)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, wrapContentWidth: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label="wrapContentHeight">
+        <Switch
+          checked={Boolean(m.wrapContentHeight)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, wrapContentHeight: Boolean(checked) } })}
+        />
+      </Field>
+      {(m.wrapContentSize || m.wrapContentWidth) && (
+        <Field label="wrapContent unbounded">
+          <Switch
+            checked={Boolean(m.wrapContentSizeUnbounded || m.wrapContentWidthUnbounded)}
+            onCheckedChange={(checked) =>
+              patchNode(node.id, {
+                modifiers: {
+                  ...m,
+                  wrapContentSizeUnbounded: Boolean(checked),
+                  wrapContentWidthUnbounded: Boolean(checked),
+                  wrapContentHeightUnbounded: Boolean(checked),
+                },
+              })
+            }
+          />
+        </Field>
+      )}
       <SpacingEditor
         label="Padding"
         value={m.padding}
@@ -2617,6 +3010,12 @@ function ComposeLayout({
           type="number"
           value={m.elevationDp ?? 0}
           onChange={(e) => patchNode(node.id, { modifiers: { ...m, elevationDp: Number(e.target.value) } })}
+        />
+      </Field>
+      <Field label="clipToBounds">
+        <Switch
+          checked={Boolean(m.clipToBounds)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, clipToBounds: Boolean(checked) } })}
         />
       </Field>
       <Field label="Clip">
@@ -2680,23 +3079,53 @@ function ComposeLayout({
         </Field>
       ) : null}
       {isContainer ? (
-        <Field label="Scroll axis">
-          <Select
-            value={m.scrollAxis ?? "none"}
-            onValueChange={(value) =>
-              value && patchNode(node.id, { modifiers: { ...m, scrollAxis: value as NonNullable<typeof m.scrollAxis> } })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">none</SelectItem>
-              <SelectItem value="vertical">vertical</SelectItem>
-              <SelectItem value="horizontal">horizontal</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <>
+          <Field label="Scroll axis">
+            <Select
+              value={m.verticalScroll ? "vertical" : m.horizontalScroll ? "horizontal" : (m.scrollAxis ?? "none")}
+              onValueChange={(value) => {
+                if (!value) return;
+                patchNode(node.id, {
+                  modifiers: {
+                    ...m,
+                    scrollAxis: value as NonNullable<typeof m.scrollAxis>,
+                    verticalScroll: value === "vertical",
+                    horizontalScroll: value === "horizontal",
+                  },
+                });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">none</SelectItem>
+                <SelectItem value="vertical">verticalScroll</SelectItem>
+                <SelectItem value="horizontal">horizontalScroll</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {(m.verticalScroll || m.horizontalScroll || (m.scrollAxis && m.scrollAxis !== "none")) && (
+            <>
+              <Field label="scroll enabled">
+                <Switch
+                  checked={m.scrollEnabled !== false}
+                  onCheckedChange={(checked) =>
+                    patchNode(node.id, { modifiers: { ...m, scrollEnabled: Boolean(checked) } })
+                  }
+                />
+              </Field>
+              <Field label="reverseScrolling">
+                <Switch
+                  checked={Boolean(m.reverseScrolling)}
+                  onCheckedChange={(checked) =>
+                    patchNode(node.id, { modifiers: { ...m, reverseScrolling: Boolean(checked) } })
+                  }
+                />
+              </Field>
+            </>
+          )}
+        </>
       ) : null}
       <Field label="IME padding">
         <Switch
@@ -2708,6 +3137,149 @@ function ComposeLayout({
         <Switch
           checked={Boolean(m.systemBarsPadding)}
           onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, systemBarsPadding: Boolean(checked) } })}
+        />
+      </Field>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        graphicsLayer
+      </div>
+      <Field label="scaleX / scaleY">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            step={0.05}
+            value={m.graphicsScaleX ?? 1}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsScaleX: Number(e.target.value) } })
+            }
+          />
+          <Input
+            type="number"
+            step={0.05}
+            value={m.graphicsScaleY ?? 1}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsScaleY: Number(e.target.value) } })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="translationX / Y">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            value={m.graphicsTranslationX ?? 0}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsTranslationX: Number(e.target.value) } })
+            }
+          />
+          <Input
+            type="number"
+            value={m.graphicsTranslationY ?? 0}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsTranslationY: Number(e.target.value) } })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="rotationX / Y / Z">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            value={m.graphicsRotationX ?? 0}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsRotationX: Number(e.target.value) } })
+            }
+          />
+          <Input
+            type="number"
+            value={m.graphicsRotationY ?? 0}
+            onChange={(e) =>
+              patchNode(node.id, { modifiers: { ...m, graphicsRotationY: Number(e.target.value) } })
+            }
+          />
+          <Input
+            type="number"
+            value={m.graphicsRotationZ ?? m.rotationDeg ?? 0}
+            onChange={(e) =>
+              patchNode(node.id, {
+                modifiers: { ...m, graphicsRotationZ: Number(e.target.value), rotationDeg: Number(e.target.value) },
+              })
+            }
+          />
+        </div>
+      </Field>
+      <Field label="shadowElevation">
+        <Input
+          type="number"
+          value={m.graphicsShadowElevation ?? 0}
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, graphicsShadowElevation: Number(e.target.value) } })
+          }
+        />
+      </Field>
+      <Field label="graphicsLayer clip">
+        <Switch
+          checked={Boolean(m.graphicsClip)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, graphicsClip: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label="combinedClickable">
+        <Switch
+          checked={Boolean(m.combinedClickable)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, combinedClickable: Boolean(checked) } })}
+        />
+      </Field>
+      <Field label="selectable">
+        <Switch
+          checked={Boolean(m.selectable)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, selectable: Boolean(checked) } })}
+        />
+      </Field>
+      {m.selectable ? (
+        <Field label="selected">
+          <Switch
+            checked={Boolean(m.selected)}
+            onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, selected: Boolean(checked) } })}
+          />
+        </Field>
+      ) : null}
+      <Field label="toggleable">
+        <Switch
+          checked={Boolean(m.toggleable)}
+          onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, toggleable: Boolean(checked) } })}
+        />
+      </Field>
+      {m.toggleable ? (
+        <Field label="toggled">
+          <Switch
+            checked={Boolean(m.toggled)}
+            onCheckedChange={(checked) => patchNode(node.id, { modifiers: { ...m, toggled: Boolean(checked) } })}
+          />
+        </Field>
+      ) : null}
+      <Field label="onClickLabel">
+        <Input
+          value={m.onClickLabel ?? ""}
+          placeholder="TalkBack label"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, onClickLabel: e.target.value || undefined } })
+          }
+        />
+      </Field>
+      <Field label="semantics mergeDescendants">
+        <Switch
+          checked={Boolean(m.semanticsMergeDescendants)}
+          onCheckedChange={(checked) =>
+            patchNode(node.id, { modifiers: { ...m, semanticsMergeDescendants: Boolean(checked) } })
+          }
+        />
+      </Field>
+      <Field label="semantics contentDescription">
+        <Input
+          value={m.semanticsLabel ?? ""}
+          placeholder="contentDescription"
+          onChange={(e) =>
+            patchNode(node.id, { modifiers: { ...m, semanticsLabel: e.target.value || undefined } })
+          }
         />
       </Field>
       <Field label="Border width / token">

@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SEED_OPTIONS } from "@/lib/theme";
+import { normalizeDocument } from "@/lib/document";
 import { documentFingerprint, useDesigner } from "@/lib/store";
 import type { CanvasState, CanvasViewMode, WorkspaceMode } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -59,10 +60,11 @@ export function Toolbar() {
   async function publish() {
     setPublishing(true);
     try {
+      const payloadDoc = normalizeDocument(screen);
       const res = await fetch("/api/screens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(screen),
+        body: JSON.stringify(payloadDoc),
       });
       if (!res.ok) throw new Error(await res.text());
       const payload = (await res.json()) as { id: string; devicePath: string };

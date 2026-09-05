@@ -45,12 +45,21 @@ function sanitizeModifiers(
   for (const key of [
     "widthDp",
     "heightDp",
+    "sizeDp",
     "minWidthDp",
     "maxWidthDp",
     "minHeightDp",
     "maxHeightDp",
+    "defaultMinWidthDp",
+    "defaultMinHeightDp",
+    "requiredWidthDp",
+    "requiredHeightDp",
+    "requiredSizeDp",
     "elevationDp",
     "borderWidthDp",
+    "graphicsTranslationX",
+    "graphicsTranslationY",
+    "graphicsShadowElevation",
   ] as const) {
     const value = next[key];
     if (typeof value === "number") next[key] = Math.round(value);

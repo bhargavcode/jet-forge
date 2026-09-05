@@ -173,7 +173,13 @@ export function createWidgetGalleryScreen(): ScreenDef {
   topBar.props = { title: "Widget gallery", navigationIcon: "widgets" };
 
   const column = createNode("Column");
-  column.props = { arrangement: "top", alignment: "start", spacedBy: 12 };
+  column.props = {
+    verticalArrangement: "Top",
+    horizontalAlignment: "Start",
+    arrangement: "Top",
+    alignment: "Start",
+    spacedBy: 12,
+  };
   column.modifiers = { fillMaxWidth: true, fillMaxHeight: true, padding: { all: 16 } };
 
   const intro = createNode("Text");

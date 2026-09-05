@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10 as const;
+export const SCHEMA_VERSION = 11 as const;
 
 export type NodeType =
   | "Scaffold"
@@ -174,25 +174,123 @@ export interface ConstraintSpec {
   margin?: MarginSpec;
 }
 
+export const ARRANGEMENTS = [
+  "Top",
+  "Bottom",
+  "Start",
+  "End",
+  "Center",
+  "SpaceBetween",
+  "SpaceAround",
+  "SpaceEvenly",
+] as const;
+export type ArrangementName = (typeof ARRANGEMENTS)[number];
+
+export const ALIGNMENTS = [
+  "Top",
+  "Bottom",
+  "Start",
+  "End",
+  "Center",
+  "CenterHorizontally",
+  "CenterVertically",
+  "TopStart",
+  "TopCenter",
+  "TopEnd",
+  "CenterStart",
+  "CenterEnd",
+  "BottomStart",
+  "BottomCenter",
+  "BottomEnd",
+] as const;
+export type AlignmentName = (typeof ALIGNMENTS)[number];
+
+export const ALIGN_BY_VALUES = ["firstBaseline", "lastBaseline", "centerVertically", "top", "bottom"] as const;
+export type AlignByValue = (typeof ALIGN_BY_VALUES)[number];
+
+export const COLUMN_ARRANGEMENTS: ArrangementName[] = [
+  "Top",
+  "Bottom",
+  "Center",
+  "SpaceBetween",
+  "SpaceAround",
+  "SpaceEvenly",
+];
+export const ROW_ARRANGEMENTS: ArrangementName[] = [
+  "Start",
+  "End",
+  "Center",
+  "SpaceBetween",
+  "SpaceAround",
+  "SpaceEvenly",
+];
+export const COLUMN_ALIGNMENTS: AlignmentName[] = ["Start", "End", "CenterHorizontally", "Center"];
+export const ROW_ALIGNMENTS: AlignmentName[] = ["Top", "Bottom", "CenterVertically", "Center"];
+export const BOX_ALIGNMENTS: AlignmentName[] = [
+  "TopStart",
+  "TopCenter",
+  "TopEnd",
+  "CenterStart",
+  "Center",
+  "CenterEnd",
+  "BottomStart",
+  "BottomCenter",
+  "BottomEnd",
+];
+
 export interface ModifierSpec {
   fillMaxWidth?: boolean;
   fillMaxHeight?: boolean;
   /** Convenience: both axes fill (Compose fillMaxSize). */
   fillMaxSize?: boolean;
+  /** Modifier.fillMaxSize(fraction) — 0..1, default 1. */
+  fillMaxSizeFraction?: number;
+  /** Modifier.fillMaxWidth(fraction) — 0..1, default 1. */
+  fillMaxWidthFraction?: number;
+  /** Modifier.fillMaxHeight(fraction) — 0..1, default 1. */
+  fillMaxHeightFraction?: number;
   widthMode?: SizeMode;
   heightMode?: SizeMode;
   widthDp?: number;
   heightDp?: number;
+  /** Modifier.size(dp) — both axes when width/height are unset. */
+  sizeDp?: number;
   minWidthDp?: number;
   maxWidthDp?: number;
   minHeightDp?: number;
   maxHeightDp?: number;
+  /** Modifier.defaultMinSize */
+  defaultMinWidthDp?: number;
+  defaultMinHeightDp?: number;
+  /** Modifier.requiredWidth / requiredHeight / requiredSize */
+  requiredWidthDp?: number;
+  requiredHeightDp?: number;
+  requiredSizeDp?: number;
+  wrapContentSize?: boolean;
+  wrapContentSizeAlign?: AlignmentName;
+  wrapContentSizeUnbounded?: boolean;
+  wrapContentWidth?: boolean;
+  wrapContentWidthAlign?: AlignmentName;
+  wrapContentWidthUnbounded?: boolean;
+  wrapContentHeight?: boolean;
+  wrapContentHeightAlign?: AlignmentName;
+  wrapContentHeightUnbounded?: boolean;
   /** Width / height aspect ratio, e.g. 1.5. */
   aspectRatio?: number;
+  aspectRatioMatchHeightFirst?: boolean;
+  /** ColumnScope/RowScope Modifier.weight */
   weight?: number;
+  /** Compose weight(fill) — default true. */
+  weightFill?: boolean;
+  /** ColumnScope/RowScope/BoxScope Modifier.align */
+  align?: AlignmentName;
+  /** RowScope Modifier.alignBy */
+  alignBy?: AlignByValue;
+  alignByBaseline?: boolean;
   padding?: PaddingSpec;
   margin?: MarginSpec;
   clip?: "none" | "extraSmall" | "small" | "medium" | "large" | "full";
+  clipToBounds?: boolean;
   alpha?: number;
   rotationDeg?: number;
   offsetXDp?: number;
@@ -203,10 +301,34 @@ export interface ModifierSpec {
   backgroundHex?: string;
   borderWidthDp?: number;
   borderToken?: ColorToken;
+  /** Modifier.graphicsLayer */
+  graphicsScaleX?: number;
+  graphicsScaleY?: number;
+  graphicsTranslationX?: number;
+  graphicsTranslationY?: number;
+  graphicsRotationX?: number;
+  graphicsRotationY?: number;
+  graphicsRotationZ?: number;
+  graphicsShadowElevation?: number;
+  graphicsClip?: boolean;
   /** Modifier.clickable — show ripple / pointer affordance in design preview. */
   clickable?: boolean;
   rippleEnabled?: boolean;
+  combinedClickable?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  toggleable?: boolean;
+  toggled?: boolean;
+  interactionEnabled?: boolean;
+  onClickLabel?: string;
+  semanticsMergeDescendants?: boolean;
+  semanticsLabel?: string;
   scrollAxis?: ScrollAxis;
+  /** Modifier.verticalScroll / horizontalScroll extras */
+  verticalScroll?: boolean;
+  horizontalScroll?: boolean;
+  scrollEnabled?: boolean;
+  reverseScrolling?: boolean;
   imePadding?: boolean;
   systemBarsPadding?: boolean;
 }

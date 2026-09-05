@@ -147,17 +147,19 @@ function cloneSnapshot(state: { screen: ScreenDocument; currentScreenId: string;
 let lastPatch: { id: string; at: number } | null = null;
 
 export function documentFingerprint(screen: ScreenDocument) {
+  const doc = normalizeDocument(screen);
   return JSON.stringify({
-    name: screen.name,
-    theme: screen.theme,
-    assets: screen.assets,
-    screens: screen.screens,
-    dataSources: screen.dataSources,
-    components: screen.components,
-    dataModels: screen.dataModels,
-    activeModelId: screen.activeModelId,
-    startScreenId: screen.startScreenId,
-    root: screen.root?.id,
+    schemaVersion: doc.schemaVersion,
+    name: doc.name,
+    theme: doc.theme,
+    assets: doc.assets,
+    screens: doc.screens,
+    dataSources: doc.dataSources,
+    components: doc.components,
+    dataModels: doc.dataModels,
+    activeModelId: doc.activeModelId,
+    startScreenId: doc.startScreenId,
+    root: doc.root,
   });
 }
 
@@ -717,7 +719,7 @@ export const useDesigner = create<DesignerState>()(
       };
     },
     {
-      name: "compose-studio-draft-v8",
+      name: "compose-studio-draft-v9",
       partialize: (state) => ({
         screen: state.screen,
         currentScreenId: state.currentScreenId,

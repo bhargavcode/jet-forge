@@ -91,29 +91,53 @@ export function createNode(type: NodeType): UiNode {
     case "Column":
       return {
         ...base,
-        props: { arrangement: "top", alignment: "start", spacedBy: 12 },
+        props: {
+          verticalArrangement: "Top",
+          horizontalAlignment: "Start",
+          arrangement: "Top",
+          alignment: "Start",
+          spacedBy: 12,
+        },
         modifiers: { fillMaxWidth: true, padding: { all: 16 } },
       };
     case "Row":
       return {
         ...base,
-        props: { arrangement: "start", alignment: "center", spacedBy: 12 },
+        props: {
+          horizontalArrangement: "Start",
+          verticalAlignment: "CenterVertically",
+          arrangement: "Start",
+          alignment: "CenterVertically",
+          spacedBy: 12,
+        },
         modifiers: { fillMaxWidth: true },
       };
     case "Box":
-      return { ...base, props: { alignment: "topStart" } };
+      return { ...base, props: { alignment: "TopStart", contentAlignment: "TopStart" } };
     case "LazyColumn":
       return {
         ...base,
-        props: { spacedBy: 12 },
-        modifiers: { fillMaxWidth: true, fillMaxHeight: true, padding: { all: 16 } },
+        props: {
+          verticalArrangement: "Top",
+          horizontalAlignment: "Start",
+          arrangement: "Top",
+          alignment: "Start",
+          spacedBy: 12,
+        },
+        modifiers: { fillMaxWidth: true, fillMaxHeight: true, verticalScroll: true, padding: { all: 16 } },
         itemBinding: "",
       };
     case "LazyRow":
       return {
         ...base,
-        props: { spacedBy: 12 },
-        modifiers: { fillMaxWidth: true, heightDp: 120 },
+        props: {
+          horizontalArrangement: "Start",
+          verticalAlignment: "CenterVertically",
+          arrangement: "Start",
+          alignment: "CenterVertically",
+          spacedBy: 12,
+        },
+        modifiers: { fillMaxWidth: true, heightDp: 120, horizontalScroll: true },
         itemBinding: "",
       };
     case "LazyVerticalGrid":

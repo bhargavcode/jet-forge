@@ -29,11 +29,11 @@ import type {
   IconName,
   ModifierSpec,
   NodeType,
-  ScrollAxis,
   TextStyle,
   TouchEvent,
   UiNode,
 } from "@/lib/schema";
+import { childAlignSelf, fillPercent, resolvedScrollAxis } from "@/lib/compose-params";
 import { containerLayoutStyle } from "@/lib/layout";
 import { useDesigner } from "@/lib/store";
 import { SelectionChrome } from "@/components/designer/SelectionChrome";
@@ -138,7 +138,9 @@ function clipClass(clip?: ModifierSpec["clip"]) {
   }
 }
 
-function scrollOverflowClass(axis?: ScrollAxis) {
+function scrollOverflowClass(modifiers?: ModifierSpec) {
+  if (!modifiers || modifiers.scrollEnabled === false) return "overflow-hidden";
+  const axis = resolvedScrollAxis(modifiers);
   // One axis only — CSS turns the other into auto if left unspecified, which shows both scrollbars.
   if (axis === "vertical") return "overflow-y-auto overflow-x-hidden";
   if (axis === "horizontal") return "overflow-x-auto overflow-y-hidden";
@@ -152,25 +154,61 @@ function insetPaddingStyle(modifiers: ModifierSpec): CSSProperties {
   return style;
 }
 
-function modifierStyle(modifiers: ModifierSpec): CSSProperties {
+function modifierStyle(modifiers: ModifierSpec, parentType?: NodeType | null): CSSProperties {
   const background =
     modifiers.backgroundHex ||
     (modifiers.backgroundToken ? COLOR_VAR[modifiers.backgroundToken] : undefined);
   const borderColor = modifiers.borderToken ? COLOR_VAR[modifiers.borderToken] : undefined;
+  const fillSize = Boolean(modifiers.fillMaxSize || modifiers.widthMode === "fill" && modifiers.heightMode === "fill");
+  const fillWidth = Boolean(modifiers.fillMaxWidth || modifiers.widthMode === "fill" || fillSize);
+  const fillHeight = Boolean(modifiers.fillMaxHeight || modifiers.heightMode === "fill" || fillSize);
+  const widthFill = fillPercent(fillWidth, modifiers.fillMaxWidthFraction ?? modifiers.fillMaxSizeFraction, fillWidth);
+  const heightFill = fillPercent(fillHeight, modifiers.fillMaxHeightFraction ?? modifiers.fillMaxSizeFraction, fillHeight);
+  const size = modifiers.sizeDp ?? modifiers.requiredSizeDp;
+  const requiredW = modifiers.requiredWidthDp ?? modifiers.requiredSizeDp;
+  const requiredH = modifiers.requiredHeightDp ?? modifiers.requiredSizeDp;
+  const wrapW = Boolean(modifiers.wrapContentWidth || modifiers.wrapContentSize);
+  const wrapH = Boolean(modifiers.wrapContentHeight || modifiers.wrapContentSize);
+  const width = wrapW
+    ? "fit-content"
+    : requiredW != null
+      ? dp(requiredW)
+      : widthFill ?? (modifiers.widthDp != null ? dp(modifiers.widthDp) : size != null ? dp(size) : "fit-content");
+  const height = wrapH
+    ? "auto"
+    : requiredH != null
+      ? dp(requiredH)
+      : heightFill ?? (modifiers.heightDp != null ? dp(modifiers.heightDp) : size != null ? dp(size) : "auto");
+  const scaleX = modifiers.graphicsScaleX ?? 1;
+  const scaleY = modifiers.graphicsScaleY ?? 1;
+  const rotZ = modifiers.graphicsRotationZ ?? modifiers.rotationDeg ?? 0;
+  const rotX = modifiers.graphicsRotationX ?? 0;
+  const rotY = modifiers.graphicsRotationY ?? 0;
+  const tx = (modifiers.graphicsTranslationX ?? 0) + (modifiers.offsetXDp ?? 0);
+  const ty = (modifiers.graphicsTranslationY ?? 0) + (modifiers.offsetYDp ?? 0);
+  const transforms = [
+    tx || ty ? `translate(${tx}px, ${ty}px)` : "",
+    rotX ? `rotateX(${rotX}deg)` : "",
+    rotY ? `rotateY(${rotY}deg)` : "",
+    rotZ ? `rotate(${rotZ}deg)` : "",
+    scaleX !== 1 || scaleY !== 1 ? `scale(${scaleX}, ${scaleY})` : "",
+  ].filter(Boolean);
+  const weight = modifiers.weight;
   return {
-    width: modifiers.fillMaxWidth ? "100%" : modifiers.widthDp != null ? dp(modifiers.widthDp) : "fit-content",
-    height: modifiers.fillMaxHeight ? "100%" : modifiers.heightDp != null ? dp(modifiers.heightDp) : "auto",
-    maxWidth: modifiers.fillMaxWidth ? "100%" : undefined,
-    flex: modifiers.weight ? modifiers.weight : undefined,
+    width,
+    height,
+    minWidth: modifiers.minWidthDp != null ? dp(modifiers.minWidthDp) : modifiers.defaultMinWidthDp != null ? dp(modifiers.defaultMinWidthDp) : undefined,
+    maxWidth: modifiers.maxWidthDp != null ? dp(modifiers.maxWidthDp) : widthFill && !wrapW ? widthFill : undefined,
+    minHeight: modifiers.minHeightDp != null ? dp(modifiers.minHeightDp) : modifiers.defaultMinHeightDp != null ? dp(modifiers.defaultMinHeightDp) : undefined,
+    maxHeight: modifiers.maxHeightDp != null ? dp(modifiers.maxHeightDp) : undefined,
+    aspectRatio: modifiers.aspectRatio && modifiers.aspectRatio > 0 ? String(modifiers.aspectRatio) : undefined,
+    flexGrow: weight ? weight : undefined,
+    flexShrink: weight ? 1 : undefined,
+    flexBasis: weight ? (modifiers.weightFill === false ? "auto" : 0) : undefined,
+    alignSelf: childAlignSelf(parentType, modifiers.align),
     opacity: modifiers.alpha == null ? undefined : modifiers.alpha,
-    transform: [
-      modifiers.offsetXDp || modifiers.offsetYDp
-        ? `translate(${modifiers.offsetXDp ?? 0}px, ${modifiers.offsetYDp ?? 0}px)`
-        : "",
-      modifiers.rotationDeg ? `rotate(${modifiers.rotationDeg}deg)` : "",
-    ]
-      .filter(Boolean)
-      .join(" ") || undefined,
+    transform: transforms.join(" ") || undefined,
+    transformOrigin: transforms.length ? "center" : undefined,
     background,
     border:
       modifiers.borderWidthDp && borderColor
@@ -179,7 +217,11 @@ function modifierStyle(modifiers: ModifierSpec): CSSProperties {
     boxShadow:
       modifiers.elevationDp && modifiers.elevationDp > 0
         ? `0 ${Math.max(1, modifiers.elevationDp / 3)}px ${modifiers.elevationDp}px rgb(0 0 0 / 18%)`
-        : undefined,
+        : modifiers.graphicsShadowElevation
+          ? `0 ${Math.max(1, modifiers.graphicsShadowElevation / 3)}px ${modifiers.graphicsShadowElevation}px rgb(0 0 0 / 18%)`
+          : undefined,
+    overflow: modifiers.clipToBounds || modifiers.graphicsClip ? "hidden" : undefined,
+    zIndex: modifiers.zIndex,
     ...paddingStyle(modifiers),
   };
 }
@@ -317,6 +359,7 @@ interface NodeProps {
   droppable?: boolean;
   itemIndex?: number;
   interactive: boolean;
+  parentType?: NodeType | null;
 }
 
 export function ComposeNode({
@@ -326,6 +369,7 @@ export function ComposeNode({
   onSelect,
   itemIndex = 0,
   interactive,
+  parentType = null,
 }: NodeProps) {
   const runtime = useRuntime();
   const selected = selectedId === node.id;
@@ -346,6 +390,7 @@ export function ComposeNode({
       itemIndex={itemIndex}
       extraClass={extraClass}
       extraStyle={extraStyle}
+      parentType={parentType}
     >
       {content}
     </NodeShell>
@@ -363,6 +408,7 @@ export function ComposeNode({
         onSelect={onSelect}
         itemIndex={extraIndex + index}
         interactive={interactive}
+        parentType={node.type}
       />
     ));
 
@@ -405,7 +451,7 @@ export function ComposeNode({
           id={`${node.id}::content`}
           className={cn(
             "relative min-h-0 min-w-0 flex-1",
-            scrollOverflowClass(content.modifiers?.scrollAxis),
+            scrollOverflowClass(content.modifiers),
           )}
         >
           <ComposeNode
@@ -588,10 +634,10 @@ export function ComposeNode({
         className={cn(
           "min-w-0",
           (node.modifiers.fillMaxHeight || isLazy) && "h-full min-h-0",
-          isLazy ? "overflow-y-auto overflow-x-hidden" : scrollOverflowClass(node.modifiers.scrollAxis),
+          isLazy ? "overflow-y-auto overflow-x-hidden" : scrollOverflowClass(node.modifiers),
         )}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: spacedBy, width: "100%" }}>
+        <div style={{ ...containerLayoutStyle(node), gap: spacedBy, width: "100%" }}>
           {children.length ? renderChildren(scope) : interactive ? <EmptyHint label="Column" /> : null}
         </div>
       </DropTarget>,
@@ -607,7 +653,7 @@ export function ComposeNode({
         disabled={!interactive}
         className={cn(
           "min-w-0",
-          isLazy ? "overflow-x-auto overflow-y-hidden" : scrollOverflowClass(node.modifiers.scrollAxis),
+          isLazy ? "overflow-x-auto overflow-y-hidden" : scrollOverflowClass(node.modifiers),
         )}
         style={surfaceStyle(node)}
       >
@@ -847,7 +893,8 @@ export function ComposeNode({
       <DropTarget
         id={node.id}
         disabled={!interactive}
-        className={cn("relative min-w-0", scrollOverflowClass(node.modifiers.scrollAxis))}
+        className={cn("relative min-w-0", scrollOverflowClass(node.modifiers))}
+        style={{ ...containerLayoutStyle(node), ...surfaceStyle(node) }}
       >
         {children.length ? renderChildren(scope) : interactive ? <EmptyHint label="Box" /> : null}
       </DropTarget>,
@@ -1612,6 +1659,7 @@ function NodeShell({
   itemIndex,
   extraClass,
   extraStyle,
+  parentType,
   children,
 }: {
   node: UiNode;
@@ -1623,6 +1671,7 @@ function NodeShell({
   itemIndex: number;
   extraClass?: string;
   extraStyle?: CSSProperties;
+  parentType?: NodeType | null;
   children: ReactNode;
 }) {
   const runtime = useRuntime();
@@ -1708,6 +1757,9 @@ function NodeShell({
       data-node-type={node.type}
       {...(!dragLocked ? drag.attributes : {})}
       {...(!dragLocked ? isolateDragListeners(drag.listeners) : {})}
+      aria-label={node.modifiers.semanticsLabel || node.modifiers.onClickLabel}
+      aria-selected={node.modifiers.selectable ? Boolean(node.modifiers.selected) : undefined}
+      aria-pressed={node.modifiers.toggleable ? Boolean(node.modifiers.toggled) : undefined}
       onPointerDown={
         runAction
           ? onPointerDown
@@ -1765,6 +1817,9 @@ function NodeShell({
         runAction && "cursor-pointer",
         node.modifiers.clickable && !runAction && "cursor-pointer ring-1 ring-[var(--md-primary)]/25",
         node.modifiers.clickable && node.modifiers.rippleEnabled !== false && "m3-ripple overflow-hidden",
+        (node.modifiers.selectable && node.modifiers.selected) || (node.modifiers.toggleable && node.modifiers.toggled)
+          ? "ring-1 ring-[var(--md-primary)]/40"
+          : "",
         selected && interactive && "m3-selected",
         drop.isOver && interactive && (isContainer(node.type) ? "m3-drop-over" : "m3-drop-sibling"),
         drag.isDragging && "opacity-40",
@@ -1773,7 +1828,7 @@ function NodeShell({
       )}
       style={{
         ...(() => {
-          const layout = modifierStyle(node.modifiers);
+          const layout = modifierStyle(node.modifiers, parentType);
           if (isSurfaceType(node.type)) layout.background = undefined;
           return layout;
         })(),

@@ -1,4 +1,15 @@
 import type { CSSProperties } from "react";
+import {
+  boxAlignCss,
+  boxAlignment,
+  columnAlignment,
+  columnArrangement,
+  rowAlignment,
+  rowArrangement,
+  arrangementJustify,
+  horizontalAlignItems,
+  verticalAlignItems,
+} from "./compose-params";
 import type { ConstraintSpec, ModifierSpec, NodeType, UiNode } from "./schema";
 
 export type HorizontalAlign = "start" | "center" | "end" | "stretch";
@@ -29,111 +40,43 @@ export function stripPeerConstraints(constraints?: ConstraintSpec): ConstraintSp
 }
 
 export function columnJustify(arrangement?: string): CSSProperties["justifyContent"] {
-  switch (arrangement) {
-    case "center":
-      return "center";
-    case "bottom":
-    case "end":
-      return "flex-end";
-    case "spaceBetween":
-      return "space-between";
-    case "spaceEvenly":
-      return "space-evenly";
-    case "spaceAround":
-      return "space-around";
-    default:
-      return "flex-start";
-  }
+  return arrangementJustify(columnArrangement({ arrangement: arrangement ?? "Top" }));
 }
 
 export function crossAxisAlign(alignment?: string): CSSProperties["alignItems"] {
-  switch (alignment) {
-    case "center":
-      return "center";
-    case "end":
-      return "flex-end";
-    case "stretch":
-      return "stretch";
-    default:
-      return "flex-start";
-  }
+  if (alignment === "stretch") return "stretch";
+  return horizontalAlignItems(columnAlignment({ alignment: alignment ?? "Start" }));
 }
 
 export function rowJustify(arrangement?: string): CSSProperties["justifyContent"] {
-  switch (arrangement) {
-    case "center":
-      return "center";
-    case "end":
-      return "flex-end";
-    case "spaceBetween":
-      return "space-between";
-    case "spaceEvenly":
-      return "space-evenly";
-    case "spaceAround":
-      return "space-around";
-    default:
-      return "flex-start";
-  }
+  return arrangementJustify(rowArrangement({ arrangement: arrangement ?? "Start" }));
 }
 
 export function rowCrossAlign(alignment?: string): CSSProperties["alignItems"] {
-  switch (alignment) {
-    case "top":
-    case "start":
-      return "flex-start";
-    case "center":
-      return "center";
-    case "bottom":
-    case "end":
-      return "flex-end";
-    case "stretch":
-      return "stretch";
-    default:
-      return "center";
-  }
+  if (alignment === "stretch") return "stretch";
+  return verticalAlignItems(rowAlignment({ alignment: alignment ?? "Top" }));
 }
 
 export function boxAlign(alignment?: string): Pick<CSSProperties, "alignItems" | "justifyContent"> {
-  switch (alignment) {
-    case "topCenter":
-      return { alignItems: "center", justifyContent: "flex-start" };
-    case "topEnd":
-      return { alignItems: "flex-end", justifyContent: "flex-start" };
-    case "centerStart":
-      return { alignItems: "flex-start", justifyContent: "center" };
-    case "center":
-      return { alignItems: "center", justifyContent: "center" };
-    case "centerEnd":
-      return { alignItems: "flex-end", justifyContent: "center" };
-    case "bottomStart":
-      return { alignItems: "flex-start", justifyContent: "flex-end" };
-    case "bottomCenter":
-      return { alignItems: "center", justifyContent: "flex-end" };
-    case "bottomEnd":
-      return { alignItems: "flex-end", justifyContent: "flex-end" };
-    case "topStart":
-    default:
-      return { alignItems: "flex-start", justifyContent: "flex-start" };
-  }
+  return boxAlignCss(boxAlignment({ alignment: alignment ?? "TopStart" }));
 }
 
 export function containerLayoutStyle(node: UiNode): CSSProperties {
-  const arrangement = String(node.props.arrangement ?? "");
-  const alignment = String(node.props.alignment ?? "");
+  const reverse = Boolean(node.modifiers.reverseScrolling);
   if (node.type === "Column" || node.type === "LazyColumn") {
     return {
       display: "flex",
-      flexDirection: "column",
-      justifyContent: columnJustify(arrangement || "top"),
-      alignItems: crossAxisAlign(alignment || "start"),
+      flexDirection: reverse ? "column-reverse" : "column",
+      justifyContent: arrangementJustify(columnArrangement(node.props)),
+      alignItems: horizontalAlignItems(columnAlignment(node.props)),
     };
   }
-  if (node.type === "Row") {
+  if (node.type === "Row" || node.type === "LazyRow") {
     return {
       display: "flex",
-      flexDirection: "row",
-      justifyContent: rowJustify(arrangement || "start"),
-      alignItems: rowCrossAlign(alignment || "center"),
+      flexDirection: reverse ? "row-reverse" : "row",
+      justifyContent: arrangementJustify(rowArrangement(node.props)),
+      alignItems: verticalAlignItems(rowAlignment(node.props)),
     };
   }
   if (node.type === "Box") {
@@ -141,8 +84,8 @@ export function containerLayoutStyle(node: UiNode): CSSProperties {
       display: "flex",
       flexDirection: "column",
       position: "relative",
-      minHeight: node.modifiers.fillMaxHeight ? "100%" : undefined,
-      ...boxAlign(String(node.props.alignment ?? "topStart")),
+      minHeight: node.modifiers.fillMaxHeight || node.modifiers.fillMaxSize ? "100%" : undefined,
+      ...boxAlignCss(boxAlignment(node.props)),
     };
   }
   return {};
@@ -150,26 +93,40 @@ export function containerLayoutStyle(node: UiNode): CSSProperties {
 
 export function inheritedChildAlignment(parent: UiNode | null): { horizontal?: string; vertical?: string } {
   if (!parent) return {};
-  const alignment = String(parent.props.alignment ?? "");
   if (parent.type === "Column" || parent.type === "LazyColumn") {
-    return { horizontal: alignment || "start" };
+    const alignment = columnAlignment(parent.props);
+    const horizontal =
+      alignment === "End" || alignment === "TopEnd" || alignment === "CenterEnd" || alignment === "BottomEnd"
+        ? "end"
+        : alignment === "Center" || alignment === "CenterHorizontally" || alignment === "TopCenter"
+          ? "center"
+          : "start";
+    return { horizontal };
   }
-  if (parent.type === "Row") {
-    return { vertical: alignment || "center" };
+  if (parent.type === "Row" || parent.type === "LazyRow") {
+    const alignment = rowAlignment(parent.props);
+    const vertical =
+      alignment === "Bottom" || alignment === "End" || alignment === "BottomStart" || alignment === "BottomEnd"
+        ? "bottom"
+        : alignment === "Center" || alignment === "CenterVertically" || alignment === "CenterStart"
+          ? "center"
+          : "top";
+    return { vertical };
   }
   if (parent.type === "Box") {
+    const alignment = boxAlignment(parent.props);
     const map: Record<string, { horizontal: string; vertical: string }> = {
-      topStart: { horizontal: "start", vertical: "top" },
-      topCenter: { horizontal: "center", vertical: "top" },
-      topEnd: { horizontal: "end", vertical: "top" },
-      centerStart: { horizontal: "start", vertical: "center" },
-      center: { horizontal: "center", vertical: "center" },
-      centerEnd: { horizontal: "end", vertical: "center" },
-      bottomStart: { horizontal: "start", vertical: "bottom" },
-      bottomCenter: { horizontal: "center", vertical: "bottom" },
-      bottomEnd: { horizontal: "end", vertical: "bottom" },
+      TopStart: { horizontal: "start", vertical: "top" },
+      TopCenter: { horizontal: "center", vertical: "top" },
+      TopEnd: { horizontal: "end", vertical: "top" },
+      CenterStart: { horizontal: "start", vertical: "center" },
+      Center: { horizontal: "center", vertical: "center" },
+      CenterEnd: { horizontal: "end", vertical: "center" },
+      BottomStart: { horizontal: "start", vertical: "bottom" },
+      BottomCenter: { horizontal: "center", vertical: "bottom" },
+      BottomEnd: { horizontal: "end", vertical: "bottom" },
     };
-    return map[alignment] ?? map.topStart;
+    return map[alignment] ?? map.TopStart;
   }
   return {};
 }

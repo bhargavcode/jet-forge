@@ -1,6 +1,7 @@
 import { SAMPLE_ARTICLE_KOTLIN, SAMPLE_NEWS_KOTLIN, parseKotlinDataClass } from "./kotlin-model";
 import { normalizeDocument } from "./document";
 import type { ClickAction, ScreenDocument, UiNode } from "./schema";
+import { SCHEMA_VERSION } from "./schema";
 import { createWidgetGalleryScreen } from "./widget-gallery-screen";
 
 const fade = (delay = 0) => ({ type: "fade" as const, durationMs: 280, delayMs: delay, staggerMs: 40 });
@@ -399,7 +400,7 @@ export function createStarterScreen(): ScreenDocument {
   });
 
   return normalizeDocument({
-    schemaVersion: 3,
+    schemaVersion: SCHEMA_VERSION,
     id: "us-briefing",
     name: "US Briefing",
     theme: { mode: "light", seed: "blue" },
